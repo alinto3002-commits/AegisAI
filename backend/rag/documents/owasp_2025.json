@@ -1,0 +1,192 @@
+[
+  {
+    "id": "OWASP-2025-A01",
+    "owasp_id": "A01:2025",
+    "category": "Broken Access Control",
+    "title": "Broken Access Control (A01:2025)",
+    "cwe_id": "CWE-22, CWE-862, CWE-639",
+    "severity": "CRITICAL",
+    "language": "general",
+    "tags": ["access-control", "authorization", "idor", "path-traversal", "permissions"],
+    "content": "Broken Access Control occurs when restrictions on what authenticated or unauthenticated users are allowed to do are not properly enforced. Attackers can exploit these flaws to access unauthorized functionality or data, such as other users' accounts, sensitive files, or administrative functions. In 2025, A01 continues to highlight missing authorization checks, Insecure Direct Object References (IDOR), and path traversal vulnerabilities (e.g. user-supplied paths passed to open() or os.path.join() without canonicalization).",
+    "vulnerable_example": "# Python vulnerable to Path Traversal and missing permission check:\n@app.get('/download')\ndef download_file(filename: str):\n    return open(f'/var/data/{filename}', 'rb').read()\n\n// Java vulnerable IDOR:\n@GetMapping(\"/account/{id}\")\npublic Account getAccount(@PathVariable String id) {\n    return accountRepository.findById(id); // Missing ownership check\n}",
+    "secure_example": "# Python Secure Implementation:\nfrom pathlib import Path\nBASE_DIR = Path('/var/data').resolve()\n\n@app.get('/download')\ndef download_file(filename: str, current_user = Depends(get_current_user)):\n    safe_path = (BASE_DIR / filename).resolve()\n    if not safe_path.is_relative_to(BASE_DIR):\n        raise HTTPException(status_code=403, detail='Access Denied')\n    return safe_path.read_bytes()\n\n// Java Secure Implementation:\n@PreAuthorize(\"#id == authentication.principal.id or hasRole('ADMIN')\")\n@GetMapping(\"/account/{id}\")\npublic Account getAccount(@PathVariable String id) {\n    return accountRepository.findById(id);\n}",
+    "remediation_guidelines": [
+      "Enforce principle of least privilege: deny by default.",
+      "Always verify object ownership and user permissions on every request.",
+      "Validate and canonicalize all file paths using Path.resolve() and verify they remain within allowed root directories.",
+      "Disable directory browsing on web servers."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A02",
+    "owasp_id": "A02:2025",
+    "category": "Security Misconfiguration",
+    "title": "Security Misconfiguration (A02:2025)",
+    "cwe_id": "CWE-16, CWE-1004, CWE-942",
+    "severity": "HIGH",
+    "language": "general",
+    "tags": ["misconfiguration", "cors", "debug", "headers", "defaults"],
+    "content": "Security Misconfiguration includes running applications with debug flags enabled in production, wildcard CORS policies (Access-Control-Allow-Origin: *), missing security response headers (CSP, HSTS, X-Content-Type-Options), default administrative accounts/passwords, and exposed internal API routes or cloud metadata endpoints.",
+    "vulnerable_example": "# Python FastAPI/Flask vulnerable misconfiguration:\napp.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True)\napp.run(debug=True, host='0.0.0.0')\n\n// Java Spring vulnerable misconfiguration:\n@CrossOrigin(origins = \"*\")\n@Configuration\npublic class WebSecurityConfig extends WebSecurityConfigurerAdapter {\n    protected void configure(HttpSecurity http) throws Exception {\n        http.csrf().disable().authorizeRequests().anyRequest().permitAll();\n    }\n}",
+    "secure_example": "# Python Secure Configuration:\nimport os\nALLOWED_ORIGINS = [os.getenv('FRONTEND_URL', 'https://app.company.com')]\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=ALLOWED_ORIGINS,\n    allow_credentials=True,\n    allow_methods=['GET', 'POST', 'PUT', 'DELETE'],\n    allow_headers=['Authorization', 'Content-Type']\n)\n# Never run debug=True in production\nif __name__ == '__main__':\n    uvicorn.run('main:app', host='127.0.0.1', port=8000, reload=False)",
+    "remediation_guidelines": [
+      "Disable debug mode, verbose stack traces, and test endpoints in production environments.",
+      "Specify explicit, trusted origins in CORS configurations instead of wildcard '*'.",
+      "Configure strict HTTP security headers including Content-Security-Policy, Strict-Transport-Security, and X-Content-Type-Options.",
+      "Use automated configuration review and infrastructure-as-code linting."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A03",
+    "owasp_id": "A03:2025",
+    "category": "Software Supply Chain Failures",
+    "title": "Software Supply Chain Failures (A03:2025)",
+    "cwe_id": "CWE-1357, CWE-1104",
+    "severity": "HIGH",
+    "language": "general",
+    "tags": ["supply-chain", "dependencies", "sbom", "pip", "maven", "cve"],
+    "content": "Software Supply Chain Failures represent risks originating from third-party libraries, build pipelines, package registries, and dependencies. Common vectors include vulnerable dependency versions with known CVEs, unpinned requirements allowing malicious package takeover, untrusted package repositories, and missing Software Bill of Materials (SBOM) or checksum verification.",
+    "vulnerable_example": "# Vulnerable unpinned or risky dependencies in requirements.txt:\nrequests\npickle5\npyyaml\n# using unverified custom registry:\n# --extra-index-url http://untrusted-internal-repo/pypi\n\n// Vulnerable Maven pom.xml with old dependency:\n<dependency>\n    <groupId>log4j</groupId>\n    <artifactId>log4j</artifactId>\n    <version>1.2.17</version> <!-- Known severe CVEs -->\n</dependency>",
+    "secure_example": "# Secure requirements.txt with pinned hashes and versions:\nrequests==2.31.0 --hash=sha256:58cd2... \npyyaml==6.0.1\n\n// Secure Maven pom.xml using dependency-check-maven & modern dependencies:\n<dependency>\n    <groupId>org.apache.logging.log4j</groupId>\n    <artifactId>log4j-core</artifactId>\n    <version>2.23.1</version>\n</dependency>",
+    "remediation_guidelines": [
+      "Pin exact dependency versions and lockfiles (poetry.lock, Pipfile.lock, package-lock.json).",
+      "Scan dependencies continuously using tools like pip-audit, safety, or OWASP Dependency-Check.",
+      "Never import or install packages over unencrypted HTTP or from unverified registries.",
+      "Maintain a verified Software Bill of Materials (SBOM) for all production releases."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A04",
+    "owasp_id": "A04:2025",
+    "category": "Cryptographic Failures",
+    "title": "Cryptographic Failures (A04:2025)",
+    "cwe_id": "CWE-327, CWE-328, CWE-312",
+    "severity": "CRITICAL",
+    "language": "general",
+    "tags": ["crypto", "encryption", "hashing", "md5", "sha1", "aes", "passwords"],
+    "content": "Cryptographic Failures involve using broken cryptographic algorithms (such as MD5 or SHA1 for password hashing or integrity), weak key lengths (< 2048-bit RSA, < 256-bit AES), hardcoded encryption keys or initialization vectors, or transmitting sensitive data without TLS.",
+    "vulnerable_example": "# Python vulnerable to weak hashing:\nimport hashlib\ndef hash_password(password: str) -> str:\n    return hashlib.md5(password.encode()).hexdigest() # Broken MD5\n\n// Java vulnerable DES/ECB:\nCipher cipher = Cipher.getInstance(\"DES/ECB/PKCS5Padding\"); // Broken cipher and ECB mode",
+    "secure_example": "# Python Secure Password Hashing:\nfrom passlib.context import CryptContext\npwd_context = CryptContext(schemes=['argon2', 'bcrypt'], deprecated='auto')\n\ndef hash_password(password: str) -> str:\n    return pwd_context.hash(password)\n\ndef verify_password(plain_password: str, hashed: str) -> bool:\n    return pwd_context.verify(plain_password, hashed)\n\n// Java Secure AES-GCM:\nCipher cipher = Cipher.getInstance(\"AES/GCM/NoPadding\");\nGCMParameterSpec spec = new GCMParameterSpec(128, iv);",
+    "remediation_guidelines": [
+      "Use modern adaptive hashing functions for passwords: Argon2id or bcrypt with appropriate work factor.",
+      "Avoid MD5, SHA1, DES, and RC4 for any security-sensitive operations.",
+      "For symmetric encryption, use AES-256 in GCM mode with a unique, cryptographically random IV per encryption.",
+      "Never store encryption keys in source code; use KMS or secure secrets managers."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A05",
+    "owasp_id": "A05:2025",
+    "category": "Injection",
+    "title": "Injection Flaws (A05:2025)",
+    "cwe_id": "CWE-89, CWE-78, CWE-79",
+    "severity": "CRITICAL",
+    "language": "general",
+    "tags": ["injection", "sqli", "command-injection", "xss", "cwe-89", "cwe-78"],
+    "content": "Injection flaws occur when untrusted user input is directly concatenated into an interpreter or command without parameterization or escaping. Notable variants include SQL Injection (CWE-89), OS Command Injection (CWE-78, e.g. shell=True), Cross-Site Scripting (XSS, CWE-79), and LDAP/NoSQL injection.",
+    "vulnerable_example": "# Python vulnerable to SQLi and Command Injection:\nimport sqlite3, os\ndef get_user(username):\n    conn = sqlite3.connect('app.db')\n    # Vulnerable raw format string\n    return conn.execute(f'SELECT * FROM users WHERE username = \"{username}\"').fetchall()\n\ndef ping_host(host):\n    os.system('ping -c 1 ' + host) # Vulnerable OS Command Injection\n\n// Java vulnerable SQLi:\nStatement stmt = conn.createStatement();\nResultSet rs = stmt.executeQuery(\"SELECT * FROM accounts WHERE id = '\" + accountId + \"'\");",
+    "secure_example": "# Python Secure Implementation:\nimport sqlite3, subprocess\ndef get_user(username: str):\n    conn = sqlite3.connect('app.db')\n    # Parameterized query\n    return conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchall()\n\ndef ping_host(host: str):\n    # Never use shell=True, pass argument list\n    import ipaddress\n    ipaddress.ip_address(host) # validate input\n    subprocess.run(['ping', '-c', '1', host], check=True, shell=False)\n\n// Java Secure Prepared Statement:\nPreparedStatement stmt = conn.prepareStatement(\"SELECT * FROM accounts WHERE id = ?\");\nstmt.setString(1, accountId);\nResultSet rs = stmt.executeQuery();",
+    "remediation_guidelines": [
+      "Always use parameterized queries (PreparedStatements / ORM query binding). Never concatenate user input into SQL queries.",
+      "Avoid subprocess/exec with shell=True or string commands. Pass argument arrays and validate inputs strictly.",
+      "Contextually encode and sanitize output to prevent XSS.",
+      "Implement positive input validation (allowlists) for all inputs."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A06",
+    "owasp_id": "A06:2025",
+    "category": "Insecure Design",
+    "title": "Insecure Design (A06:2025)",
+    "cwe_id": "CWE-1059, CWE-657",
+    "severity": "HIGH",
+    "language": "general",
+    "tags": ["design", "architecture", "rate-limiting", "threat-modeling"],
+    "content": "Insecure Design represents architectural and design flaws rather than simple implementation bugs. This encompasses missing security requirements, lack of threat modeling, omission of rate limiting on sensitive workflows (login, password reset, checkout), failure to establish defense-in-depth, and single points of failure.",
+    "vulnerable_example": "# Vulnerable design: Unlimited login attempts, allowing brute-force:\n@app.post('/api/login')\ndef login(credentials: LoginRequest):\n    user = authenticate(credentials.username, credentials.password)\n    if not user:\n        raise HTTPException(status_code=401, detail='Invalid credentials')\n    return create_token(user)",
+    "secure_example": "# Secure design with rate limiting and exponential backoff:\nfrom slowapi import Limiter\nfrom slowapi.util import get_remote_address\n\nlimiter = Limiter(key_func=get_remote_address)\n\n@app.post('/api/login')\n@limiter.limit('5/minute') # Rate limiting protects against credential stuffing\ndef login(credentials: LoginRequest):\n    user = authenticate(credentials.username, credentials.password)\n    if not user:\n        audit_log_failed_attempt(credentials.username)\n        raise HTTPException(status_code=401, detail='Invalid credentials')\n    return create_token(user)",
+    "remediation_guidelines": [
+      "Integrate threat modeling into early feature design phases.",
+      "Apply rate limiting, bot protection, and CAPTCHA on all authentication and public sensitive endpoints.",
+      "Design systems with defense-in-depth: assume perimeter breach and validate access at every layer.",
+      "Follow secure design patterns (e.g. state machine validations, circuit breakers)."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A07",
+    "owasp_id": "A07:2025",
+    "category": "Authentication Failures",
+    "title": "Authentication Failures (A07:2025)",
+    "cwe_id": "CWE-798, CWE-287, CWE-384",
+    "severity": "CRITICAL",
+    "language": "general",
+    "tags": ["auth", "hardcoded-secrets", "credentials", "passwords", "tokens", "session"],
+    "content": "Authentication Failures include hardcoded credentials (API keys, database passwords, JWT secrets embedded directly in source code), weak session management, failure to invalidate tokens on logout, predictable session tokens, and lack of multi-factor authentication for privileged operations.",
+    "vulnerable_example": "# Vulnerable hardcoded API keys and secrets:\nJWT_SECRET = 'my_super_secret_key_12345'\nAWS_SECRET_KEY = 'AKIAIOSFODNN7EXAMPLE'\nDATABASE_PASSWORD = 'admin_password!'\n\n// Java vulnerable hardcoded credential:\nprivate static final String API_TOKEN = \"ghp_abcdefghijklmnopqrstuvwxyz123456\";",
+    "secure_example": "# Secure Secret Retrieval via Environment Variables / Vault:\nimport os\nfrom dotenv import load_dotenv\nload_dotenv()\n\nJWT_SECRET = os.environ.get('JWT_SECRET_KEY')\nif not JWT_SECRET:\n    raise RuntimeError('JWT_SECRET_KEY environment variable is mandatory.')\n\n// Java Secure Configuration:\n@Value(\"${jwt.secret}\")\nprivate String jwtSecret;",
+    "remediation_guidelines": [
+      "Never store credentials, API keys, passwords, or tokens in source code repositories.",
+      "Use environment variables or enterprise secret management tools (HashiCorp Vault, AWS Secrets Manager).",
+      "Add automated git pre-commit hooks (e.g. detect-secrets, git-secrets) to block secrets from being committed.",
+      "Use short-lived tokens and implement secure token revocation mechanisms."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A08",
+    "owasp_id": "A08:2025",
+    "category": "Software or Data Integrity Failures",
+    "title": "Software or Data Integrity Failures (A08:2025)",
+    "cwe_id": "CWE-502, CWE-494",
+    "severity": "CRITICAL",
+    "language": "general",
+    "tags": ["integrity", "deserialization", "pickle", "yaml", "objectinputstream"],
+    "content": "Data integrity failures occur when software relies on plugins, libraries, or data from untrusted sources without verifying their integrity. A premier vulnerability under A08 is Insecure Deserialization (CWE-502) using native serialization formats such as Python pickle, yaml.load without SafeLoader, or Java ObjectInputStream, which permit Remote Code Execution (RCE).",
+    "vulnerable_example": "# Python vulnerable to RCE via insecure deserialization:\nimport pickle, yaml\ndef load_user_state(serialized_data):\n    return pickle.loads(serialized_data) # Remote Code Execution!\n\ndef load_config(user_input):\n    return yaml.load(user_input) # Unsafe PyYAML parser\n\n// Java vulnerable ObjectInputStream:\nObjectInputStream ois = new ObjectInputStream(clientSocket.getInputStream());\nObject obj = ois.readObject(); // Unsafe deserialization",
+    "secure_example": "# Python Secure Deserialization:\nimport json, yaml\ndef load_user_state(serialized_data: str):\n    # Use safe, data-only formats like JSON with Pydantic validation\n    return json.loads(serialized_data)\n\ndef load_config(user_input: str):\n    return yaml.safe_load(user_input) # yaml.safe_load only parses basic data\n\n// Java Secure deserialization:\nObjectMapper mapper = new ObjectMapper();\nUserDTO user = mapper.readValue(jsonStream, UserDTO.class);",
+    "remediation_guidelines": [
+      "Never use Python pickle, marshal, or Java native ObjectInputStream with data received from untrusted sources.",
+      "Always use yaml.safe_load() rather than yaml.load().",
+      "Adopt standardized, language-agnostic data serialization formats such as JSON or Protocol Buffers.",
+      "Enforce digital signatures and cryptographic checksums on downloaded binaries and update packages."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A09",
+    "owasp_id": "A09:2025",
+    "category": "Security Logging and Alerting Failures",
+    "title": "Security Logging and Alerting Failures (A09:2025)",
+    "cwe_id": "CWE-778, CWE-532",
+    "severity": "MEDIUM",
+    "language": "general",
+    "tags": ["logging", "monitoring", "audit", "pii-leakage", "log-injection"],
+    "content": "Security Logging and Alerting Failures happen when security-critical events (login failures, privilege escalation, authorization breaches, input validation failures) are not logged, leaving security teams blind during an incident. Conversely, logging sensitive data (passwords, credit cards, PII, auth tokens) in plaintext into log files violates privacy regulations and exposes credentials.",
+    "vulnerable_example": "# Vulnerable: Logging passwords in plaintext and silent error logging:\nimport logging\nlogger = logging.getLogger('app')\n\ndef login(username, password):\n    logger.info(f'User {username} attempting login with password {password}') # PII/Credential leak!\n    try:\n        auth(username, password)\n    except Exception:\n        pass # Missing audit log for authentication failure",
+    "secure_example": "# Secure Logging Practice:\nimport logging\nlogger = logging.getLogger('audit')\n\ndef login(username: str, password: str):\n    try:\n        user = auth(username, password)\n        logger.info('Authentication succeeded', extra={'username': username, 'event': 'AUTH_SUCCESS'})\n        return user\n    except AuthException as err:\n        # Never log the password!\n        logger.warning('Authentication failed', extra={'username': username, 'event': 'AUTH_FAILURE', 'reason': str(err)})\n        raise",
+    "remediation_guidelines": [
+      "Ensure all login attempts, permission failures, and administrative actions are logged with timestamp and user ID.",
+      "Sanitize and scrub log entries to ensure passwords, tokens, API keys, and PII are never logged.",
+      "Encode log messages to prevent log injection (CRLF attacks).",
+      "Centralize logs with alerting for suspicious anomaly detection."
+    ]
+  },
+  {
+    "id": "OWASP-2025-A10",
+    "owasp_id": "A10:2025",
+    "category": "Mishandling of Exceptional Conditions",
+    "title": "Mishandling of Exceptional Conditions (A10:2025)",
+    "cwe_id": "CWE-755, CWE-209, CWE-390",
+    "severity": "MEDIUM",
+    "language": "general",
+    "tags": ["error-handling", "exceptions", "stack-trace", "fail-open", "empty-catch"],
+    "content": "Mishandling of Exceptional Conditions occurs when errors are silently swallowed (e.g. empty except/catch blocks) causing systems to fail open, or when raw exception stack traces and database schema errors are returned directly in API responses, leaking internal system architecture to potential attackers.",
+    "vulnerable_example": "# Python vulnerable to bare except and silent failure-open:\ndef verify_admin_status(user):\n    try:\n        return check_remote_role_service(user.id)\n    except:\n        pass # Silently ignored! Returns None or allows execution\n    return False\n\n# Leaking raw stack trace:\n@app.exception_handler(Exception)\ndef error_handler(request, exc):\n    import traceback\n    return {'error': str(exc), 'traceback': traceback.format_exc()} # Leaks internal paths\n\n// Java empty catch block:\ntry {\n    checkSignature(req);\n} catch (Exception e) {\n    // Empty catch block - fails open!\n}",
+    "secure_example": "# Python Secure Exception Handling:\nimport logging\nlogger = logging.getLogger(__name__)\n\ndef verify_admin_status(user) -> bool:\n    try:\n        return check_remote_role_service(user.id)\n    except RemoteServiceUnavailableError as err:\n        logger.error('Role service unavailable during auth check', exc_info=True)\n        return False # Fail securely (fail-closed)\n\n@app.exception_handler(Exception)\ndef error_handler(request, exc):\n    logger.exception('Unhandled server error')\n    return JSONResponse(status_code=500, content={'error': 'Internal server error', 'request_id': request.state.id})",
+    "remediation_guidelines": [
+      "Never use bare except: or empty catch blocks. Catch specific exceptions explicitly.",
+      "Ensure systems fail closed rather than fail open upon encountering errors in security checks.",
+      "Return generic, user-friendly error messages in production APIs and keep detailed stack traces in server logs.",
+      "Always log exceptions with appropriate context for debugging."
+    ]
+  }
+]

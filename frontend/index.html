@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AegisAI — AI Code Review & Security Analysis Agent (OWASP 2025)</title>
+  <meta name="description"
+    content="Intelligent multi-agent developer platform for automated code review, OWASP Top 10 (2025) security scanning, RAG-grounded remediation, and conversational code assistance.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css?v=6">
+</head>
+
+<body class="dark-theme">
+  <!-- Main Navigation Bar -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="M9 12l2 2 4-4" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">Aegis<span>AI</span></h1>
+          <span class="brand-subtitle">Code Review & Security Analysis</span>
+        </div>
+      </div>
+
+      <nav class="nav-links">
+        <button id="nav-btn-review" class="nav-btn active" onclick="switchMainTab('review')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          Review Studio
+        </button>
+        <button id="nav-btn-kb" class="nav-btn" onclick="switchMainTab('kb')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+          Knowledge Base (RAG)
+        </button>
+        <button id="nav-btn-assistant" class="nav-btn" onclick="switchMainTab('chat')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          Code Assistant
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="app-main">
+    <!-- TAB 1: CODE REVIEW STUDIO -->
+    <section id="tab-review" class="view-tab active">
+      <div class="studio-grid">
+        <!-- LEFT COLUMN: Code Submission Module -->
+        <div class="panel code-submission-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="step-num">1</span>
+              <div>
+                <h2>Code Submission</h2>
+                <p>Python and Java source code</p>
+              </div>
+            </div>
+
+            <div class="submission-controls">
+              <!-- Auto-Identified Language Indicator -->
+              <div class="auto-lang-badge" id="auto-lang-badge"
+                title="Automatically identifies whether submitted code is Python or Java">
+                <span class="auto-lang-dot"></span>
+                <span class="auto-lang-prefix">Language:</span>
+                <span id="detected-lang-name" class="auto-lang-value">Python</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Upload Drop Zone -->
+          <div id="drop-zone" class="drop-zone" onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" class="hidden-input" accept=".py,.java"
+              onchange="handleFileUpload(event)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <span>Drag & drop source file here, or <strong class="link-text">browse</strong> (.py, .java)</span>
+          </div>
+
+          <!-- Code Editor Area -->
+          <div class="editor-container">
+            <div class="editor-statusbar">
+              <span id="editor-filename" class="editor-file">main.py</span>
+              <span id="editor-stats" class="editor-meta">0 lines | Python </span>
+            </div>
+            <textarea id="code-input" class="code-editor" spellcheck="false"
+              placeholder="// Paste Python or Java source code here..."></textarea>
+          </div>
+
+          <!-- Submission Action Bar -->
+          <div class="submission-actions">
+            <button id="btn-validate-syntax" class="btn btn-secondary" onclick="triggerSyntaxCheck()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Syntax Validation
+            </button>
+            <button id="btn-trigger-review" class="btn btn-primary" onclick="triggerMultiAgentReview()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              Run Code Review
+            </button>
+          </div>
+
+          <!-- Syntax Check Alert Box -->
+          <div id="syntax-status-box" class="syntax-box hidden"></div>
+        </div>
+
+        <!-- RIGHT COLUMN: Analysis & Findings -->
+        <div class="panel findings-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="step-num">2</span>
+              <div>
+                <h2>Review Findings</h2>
+                <p>Code Quality & Security Analysis</p>
+              </div>
+            </div>
+
+            <div id="export-group" class="export-group hidden">
+              <button id="btn-export-pdf" class="btn btn-outline" onclick="exportReport('pdf')" title="Export PDF">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+                PDF
+              </button>
+              <button id="btn-export-md" class="btn btn-outline" onclick="exportReport('markdown')"
+                title="Export PR Markdown">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <polyline points="22,6 12,13 2,6" />
+                </svg>
+                Markdown
+              </button>
+              <button id="btn-export-json" class="btn btn-outline" onclick="exportReport('json')" title="Export JSON">
+                { } JSON
+              </button>
+            </div>
+          </div>
+
+          <!-- Stepper / Progress Bar -->
+          <div id="agent-stepper" class="agent-stepper hidden">
+            <div class="stepper-title">Analysis Pipeline:</div>
+            <div class="stepper-track">
+              <div class="agent-step" id="step-code-agent">
+                <span class="step-icon">1</span>
+                <span class="step-label">Code Analysis</span>
+              </div>
+              <div class="agent-step" id="step-sec-agent">
+                <span class="step-icon">2</span>
+                <span class="step-label">Security Scan</span>
+              </div>
+              <div class="agent-step" id="step-rem-agent">
+                <span class="step-icon">3</span>
+                <span class="step-label">Remediation</span>
+              </div>
+              <div class="agent-step" id="step-pr-agent">
+                <span class="step-icon">4</span>
+                <span class="step-label">PR Summary</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Placeholder when no review triggered -->
+          <div id="findings-placeholder" class="findings-placeholder">
+            <div class="placeholder-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+            </div>
+            <h3>Ready For Automated Code Review</h3>
+            <p>Paste or upload Python or Java source code on the left, then click <strong>Run Code Review</strong>.</p>
+          </div>
+
+          <!-- Results Dashboard Container -->
+          <div id="findings-dashboard" class="findings-dashboard hidden">
+            <!-- Health Score & Metric Badges -->
+            <div class="metric-row">
+              <div class="health-card">
+                <div class="health-circle" id="health-score-circle">
+                  <span id="health-score-num">0</span>
+                  <span class="score-label">/ 100</span>
+                </div>
+                <div class="health-info">
+                  <span class="health-caption">Health & Security Score</span>
+                  <div id="verdict-badge" class="verdict-tag">PENDING</div>
+                </div>
+              </div>
+
+              <!-- Severity Breakdown Cards -->
+              <div class="severity-grid">
+                <div class="sev-card sev-crit" onclick="filterFindings('CRITICAL')">
+                  <span class="sev-count" id="count-critical">0</span>
+                  <span class="sev-name">Critical</span>
+                </div>
+                <div class="sev-card sev-high" onclick="filterFindings('HIGH')">
+                  <span class="sev-count" id="count-high">0</span>
+                  <span class="sev-name">High</span>
+                </div>
+                <div class="sev-card sev-med" onclick="filterFindings('MEDIUM')">
+                  <span class="sev-count" id="count-medium">0</span>
+                  <span class="sev-name">Medium</span>
+                </div>
+                <div class="sev-card sev-low" onclick="filterFindings('LOW')">
+                  <span class="sev-count" id="count-low">0</span>
+                  <span class="sev-name">Low</span>
+                </div>
+                <div class="sev-card sev-info" onclick="filterFindings('INFO')">
+                  <span class="sev-count" id="count-info">0</span>
+                  <span class="sev-name">Info</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Findings Filter Tabs -->
+            <div class="findings-filter-bar">
+              <button class="filter-btn active" onclick="filterFindings('ALL')">All Findings (<span
+                  id="count-all">0</span>)</button>
+              <button class="filter-btn" onclick="filterFindings('SECURITY')">OWASP Security</button>
+              <button class="filter-btn" onclick="filterFindings('QUALITY')">Code Smells</button>
+              <button class="filter-btn btn-pr-tab" onclick="switchFindingsTab('pr')">PR Summary</button>
+            </div>
+
+            <!-- Findings Card List -->
+            <div id="findings-list" class="findings-list"></div>
+
+            <!-- PR Summary View Container -->
+            <div id="pr-summary-view" class="pr-summary-view hidden">
+              <div class="pr-summary-content" id="pr-summary-markdown"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: SECURE CODING KNOWLEDGE BASE (RAG) -->
+    <section id="tab-kb" class="view-tab hidden">
+      <div class="kb-container">
+        <div class="kb-header">
+          <div>
+            <h2> Secure Coding Knowledge Base (RAG)</h2>
+            <p>Indexed repository of OWASP Top 10 (2025), CWE Standards, and Python/Java guidelines.</p>
+          </div>
+          <div class="kb-search-bar">
+            <input type="text" id="kb-search-input"
+              placeholder="Search guidelines (e.g. SQL Injection, Path Traversal, Secrets)..."
+              onkeyup="if(event.key==='Enter') searchKnowledgeBase()">
+            <button class="btn btn-primary" onclick="searchKnowledgeBase()">Search RAG</button>
+          </div>
+        </div>
+
+        <div class="kb-stats-bar" id="kb-stats-bar">
+          <span>Loading Knowledge Base statistics...</span>
+        </div>
+
+        <div id="kb-results-grid" class="kb-grid"></div>
+      </div>
+    </section>
+
+    <!-- TAB 3: CONVERSATIONAL CODE ASSISTANT -->
+    <section id="tab-chat" class="view-tab hidden">
+      <div class="chat-container">
+        <div class="chat-header">
+          <div class="chat-title-group">
+            <div class="assistant-avatar"></div>
+            <div>
+              <h2>Conversational Code Assistant</h2>
+              <p>RAG-grounded in secure coding standards and your current reviewed code.</p>
+            </div>
+          </div>
+
+          <div class="chat-quick-chips">
+            <span class="chip-label">Quick Prompts:</span>
+            <button class="chip"
+              onclick="askPresetQuestion('Why is SQL injection with f-strings risky, and how does parameterization fix it?')">Explain
+              SQLi Risk</button>
+            <button class="chip"
+              onclick="askPresetQuestion('What are the OWASP Top 10 (2025) changes and priorities?')">OWASP 2025
+              Changes</button>
+            <button class="chip"
+              onclick="askPresetQuestion('How can I safely store API keys and database credentials?')">Safe Secret
+              Storage</button>
+            <button class="chip"
+              onclick="askPresetQuestion('How do I refactor deeply nested loops using guard clauses?')">Guard Clauses
+              Pattern</button>
+          </div>
+        </div>
+
+        <div id="chat-messages" class="chat-messages">
+          <div class="message assistant-message">
+            <div class="msg-avatar"></div>
+            <div class="msg-body">
+              <div class="msg-header">AegisAI Code Assistant</div>
+              <div class="msg-text">
+                Hello! I am your RAG-powered Secure Coding Assistant. You can ask me follow-up questions about any
+                issues flagged during code review, query OWASP Top 10 (2025) standards, or ask for refactoring advice.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-bar">
+          <textarea id="chat-input"
+            placeholder="Ask a question about the code or security guidelines (Press Enter to send)..."
+            onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendChatMessage();}"></textarea>
+          <button id="chat-send-btn" class="btn btn-primary" onclick="sendChatMessage()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+            Send
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/app.js?v=6"></script>
+</body>
+
+</html>

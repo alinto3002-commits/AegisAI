@@ -1,0 +1,51 @@
+[
+  {
+    "id": "JAVA-SEC-01",
+    "category": "Secure Coding Practice",
+    "title": "Preventing SQL Injection in Java JDBC and JPA/Hibernate",
+    "owasp_id": "A05:2025",
+    "cwe_id": "CWE-89",
+    "language": "java",
+    "tags": ["java", "jdbc", "preparedstatement", "jpa", "hibernate", "sqli"],
+    "content": "In Java JDBC, building SQL strings with string concatenation (+ operators or StringBuilder) exposes applications to SQL injection. Using java.sql.PreparedStatement ensures SQL syntax and user data are separated at the database engine level.",
+    "vulnerable_example": "Statement stmt = conn.createStatement();\nString sql = \"SELECT * FROM users WHERE username = '\" + inputUsername + \"' AND password = '\" + inputPassword + \"'\";\nResultSet rs = stmt.executeQuery(sql);",
+    "secure_example": "String sql = \"SELECT * FROM users WHERE username = ? AND password = ?\";\ntry (PreparedStatement pstmt = conn.prepareStatement(sql)) {\n    pstmt.setString(1, inputUsername);\n    pstmt.setString(2, inputPassword);\n    try (ResultSet rs = pstmt.executeQuery()) {\n        // Process results safely\n    }\n}",
+    "remediation_guidelines": [
+      "Always use java.sql.PreparedStatement with parameter index placeholders (?).",
+      "In JPA/Hibernate, use named parameters (:param) instead of string concatenation in JPQL/HQL queries."
+    ]
+  },
+  {
+    "id": "JAVA-SEC-02",
+    "category": "Secure Coding Practice",
+    "title": "Preventing Path Traversal in Java File I/O",
+    "owasp_id": "A01:2025",
+    "cwe_id": "CWE-22",
+    "language": "java",
+    "tags": ["java", "file-io", "path-traversal", "nio", "canonicalpath"],
+    "content": "Accepting unvalidated filenames in Java File or java.nio.file.Path constructors allows directory traversal sequences (../ or ..\\) to access files outside the intended root directory. Validating the canonical path or using Path.normalize() and startsWith() prevents path traversal.",
+    "vulnerable_example": "File file = new File(\"/var/uploads/\" + request.getParameter(\"filename\"));\nFileInputStream fis = new FileInputStream(file);",
+    "secure_example": "Path baseDir = Paths.get(\"/var/uploads\").toRealPath();\nPath requestedPath = baseDir.resolve(request.getParameter(\"filename\")).normalize();\nif (!requestedPath.startsWith(baseDir)) {\n    throw new SecurityException(\"Access denied: Path outside safe root\");\n}\nInputStream is = Files.newInputStream(requestedPath);",
+    "remediation_guidelines": [
+      "Normalize and resolve paths against a safe root directory using java.nio.file.Path.",
+      "Check that the resolved path startsWith() the normalized base directory.",
+      "Never trust raw filenames supplied by clients without sanitization."
+    ]
+  },
+  {
+    "id": "JAVA-SEC-03",
+    "category": "Secure Coding Practice",
+    "title": "Safe Deserialization in Java",
+    "owasp_id": "A08:2025",
+    "cwe_id": "CWE-502",
+    "language": "java",
+    "tags": ["java", "deserialization", "objectinputstream", "gadget-chains", "rce"],
+    "content": "Java standard serialization via java.io.ObjectInputStream allows arbitrary object graphs to be deserialized, triggering gadget chains (e.g. Apache Commons Collections) that lead to remote arbitrary code execution.",
+    "vulnerable_example": "ObjectInputStream ois = new ObjectInputStream(clientSocket.getInputStream());\nObject obj = ois.readObject(); // Vulnerable to gadget chains",
+    "secure_example": "// Use Jackson or Gson for structured JSON deserialization:\nObjectMapper mapper = new ObjectMapper();\nUserPayload payload = mapper.readValue(inputStream, UserPayload.class);\n\n// Or if ObjectInputStream is mandatory, apply ObjectInputFilter (Java 9+):\nObjectInputFilter filter = ObjectInputFilter.Config.createFilter(\"com.myapp.models.*;!*\");\nois.setObjectInputFilter(filter);",
+    "remediation_guidelines": [
+      "Avoid ObjectInputStream whenever possible; use JSON, Protobuf, or XML with safe parsers.",
+      "If native Java serialization is required, implement an ObjectInputFilter allowlist."
+    ]
+  }
+]

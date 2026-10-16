@@ -1,0 +1,48 @@
+[
+  {
+    "id": "SMELL-01",
+    "category": "Code Smell",
+    "title": "Long Method / Excessive Function Length",
+    "cwe_id": "CWE-1075",
+    "language": "general",
+    "tags": ["maintainability", "refactoring", "clean-code", "single-responsibility"],
+    "content": "Methods or functions exceeding 30-40 lines of code frequently violate the Single Responsibility Principle (SRP). They are difficult to comprehend, test, and maintain, and they often hide subtle control-flow bugs or security validation gaps.",
+    "vulnerable_example": "def process_order(user_id, cart_items, payment_info, shipping_address):\n    # 100+ lines doing validation, calculating discounts, calling 3 APIs,\n    # updating database, sending email, generating PDF invoice...",
+    "secure_example": "def process_order(user_id: str, order_request: OrderRequest) -> OrderReceipt:\n    validate_cart(order_request.cart_items)\n    total = calculate_order_total(order_request.cart_items, order_request.discount_code)\n    payment = charge_payment(user_id, total, order_request.payment_info)\n    order = record_order(user_id, order_request, payment.transaction_id)\n    dispatch_order_confirmation(user_id, order)\n    return OrderReceipt(order_id=order.id, status='CONFIRMED')",
+    "remediation_guidelines": [
+      "Extract smaller cohesive functions with well-defined parameters and single responsibilities.",
+      "Keep method lengths ideally under 25-30 lines."
+    ]
+  },
+  {
+    "id": "SMELL-02",
+    "category": "Code Smell",
+    "title": "High Cyclomatic Complexity & Deep Nesting",
+    "cwe_id": "CWE-1075",
+    "language": "general",
+    "tags": ["complexity", "nesting", "cognitive-load", "guard-clauses"],
+    "content": "Cyclomatic complexity measures the number of linearly independent paths through program source code. High complexity (> 10) and deep indentation levels (> 3 levels of nested if/for/while blocks) exponentially increase bug frequency and obscure security logic.",
+    "vulnerable_example": "if user:\n    if user.is_active:\n        if user.has_role('editor'):\n            if document:\n                if document.status == 'DRAFT':\n                    # deep nested logic...",
+    "secure_example": "# Using Guard Clauses to flatten nesting:\nif not user or not user.is_active:\n    return PermissionDenied()\nif not user.has_role('editor'):\n    return UnauthorizedRole()\nif not document or document.status != 'DRAFT':\n    return InvalidDocumentState()\n# Flat, readable happy-path execution...",
+    "remediation_guidelines": [
+      "Use return-early guard clauses to eliminate nested indentation.",
+      "Break complex compound conditionals into descriptive helper functions.",
+      "Aim for cyclomatic complexity scores below 10 per method."
+    ]
+  },
+  {
+    "id": "SMELL-03",
+    "category": "Design Anti-Pattern",
+    "title": "God Class / Bloated Component",
+    "cwe_id": "CWE-1061",
+    "language": "general",
+    "tags": ["oop", "anti-pattern", "solid", "architecture"],
+    "content": "A God Class accumulates excessive duties, manages too many disparate concerns, and aggregates dozens of methods and state variables. This makes unit testing nearly impossible and encourages tight coupling across an application.",
+    "vulnerable_example": "public class SystemManager {\n    public void handleAuthentication() { ... }\n    public void sendEmailNotification() { ... }\n    public void renderHtmlPage() { ... }\n    public void executeDatabaseMigration() { ... }\n    public void processPayment() { ... }\n}",
+    "secure_example": "// Separated into distinct service domain classes:\npublic class AuthenticationService { ... }\npublic class NotificationService { ... }\npublic class PaymentProcessingService { ... }",
+    "remediation_guidelines": [
+      "Apply the Single Responsibility Principle (SRP) to decompose large classes.",
+      "Group cohesive operations into domain-specific service objects or modules."
+    ]
+  }
+]
