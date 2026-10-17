@@ -1,0 +1,397 @@
+================================================================================
+AEGISAI SECURE CODING MASTER REFERENCE MANUAL (2025 EDITION)
+Standards: OWASP Top 10 (2025) | CWE-Top 40 | NIST SP 800-218 | SEI CERT | PCI-DSS
+Languages: Python 3.10+ | Java 17 / 21 LTS (Spring Boot 3.x & Jakarta EE 10)
+Status: Authoritative Engineering Standard | Verified Active
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Executive Security Principles (Zero Trust, Defense-in-Depth, Least Privilege)
+2. OWASP Top 10 (2025 Edition) Category Taxonomy & Threat Matrices
+3. Common Weakness Enumeration (CWE Top 40) Master Dictionary
+4. Python Secure Coding Standards & Vulnerability Defenses (With Code Recipes)
+5. Java Enterprise Secure Coding Standards & Spring Boot Hardening Recipes
+6. Cryptographic Implementation Standards (Algorithms, Nonces, Key Lengths)
+7. Deserialization Safety Guidelines (Pickle, YAML, Java ObjectInputStream)
+8. Input Validation, Output Encoding & Web Sanitization Checklists
+9. Authentication, Session Security, JWT & Secret Management Protocols
+10. Auditing, Security Logging & Resilient Error Handling Policies
+11. Code Smells, Cyclomatic Complexity Limits & Refactoring Recipes
+12. DevSecOps CI/CD Automated Security Gates & Pre-Commit Audit Checklist
+
+
+================================================================================
+SECTION 1: EXECUTIVE SECURE CODING PRINCIPLES
+================================================================================
+1. Defense in Depth:
+   Never rely on a single layer of validation (e.g., client-side JS or single API
+   gateway check). Enforce strict input validation, data encapsulation, database
+   parameterization, and egress filtering at every layer of the architecture.
+
+2. Principle of Least Privilege (PoLP):
+   Applications and service accounts must execute with the absolute minimum
+   operating system permissions and database privileges required. Disable administrative
+   grants (e.g., root execution, DB superuser privileges).
+
+3. Fail Securely (Fail Closed):
+   When an exceptional condition or security failure occurs, the application must
+   terminate the transaction, revert state changes, log the incident with security
+   context, and return a neutral, generic error message to the client.
+
+4. Secure by Default:
+   All security controls, authentication gates, encryption standards, and CSRF/CORS
+   protections must be enabled by default. Developers must explicitly justify and
+   document any exceptions.
+
+5. Never Trust User Input:
+   Treat all incoming data—including URL query parameters, HTTP headers, cookies,
+   file uploads, form bodies, and even internal RPC payloads—as untrusted and hostile.
+
+6. Complete Mediation:
+   Every access request to every secured resource must be checked against current
+   authorization policies. Never cache access decisions across distinct HTTP requests.
+
+
+================================================================================
+SECTION 2: OWASP TOP 10 (2025 EDITION) TAXONOMY & THREAT MATRIX
+================================================================================
+
+[A01:2025] Broken Access Control (CWE-22, CWE-862, CWE-639, CWE-918)
+- Threat: Attackers access unauthorized records (IDOR), traverse directory paths,
+  forge server requests (SSRF), or perform admin operations without credentials.
+- Defenses: Enforce server-side role-based access control (RBAC), canonicalize and
+  verify filesystem paths, bind object lookups to authenticated user IDs, and
+  block outbound HTTP connections to internal IP addresses (RFC 1918, 169.254.169.254).
+
+[A02:2025] Security Misconfiguration (CWE-16, CWE-215, CWE-942)
+- Threat: Debug mode enabled in production, wildcard CORS headers (`*`), default
+  passwords, unnecessary endpoints exposed, unhardened framework headers.
+- Defenses: Set `debug=False`, configure strict CORS origins, disable directory
+  listing, remove test endpoints, enforce HSTS and Content-Security-Policy.
+
+[A03:2025] Software Supply Chain Failures (CWE-1104, CWE-1395)
+- Threat: Outdated dependencies with known CVEs (e.g. vulnerable Log4j or Jackson),
+  unpinned package manifests, dependency confusion, or malicious package updates.
+- Defenses: Pin exact versions with SHA-256 hashes, run automated vulnerability
+  scanners (pip-audit, OWASP Dependency-Check, Snyk), and utilize private mirrors.
+
+[A04:2025] Cryptographic Failures (CWE-327, CWE-328, CWE-329, CWE-338)
+- Threat: Plaintext transmission of credentials, weak password hashes (MD5, SHA-1),
+  symmetric encryption using ECB mode, or static/predictable initialization vectors.
+- Defenses: Use TLS 1.3, store passwords with Argon2id or bcrypt (cost >= 12),
+  encrypt sensitive data at rest with AES-256-GCM using unique 96-bit nonces.
+
+[A05:2025] Injection (CWE-89, CWE-78, CWE-611, CWE-90, CWE-94)
+- Threat: SQL, OS command, LDAP, or XML injection where attacker input alters
+  the query structure or executes arbitrary system binaries.
+- Defenses: Parameterized queries (PreparedStatement, ORM parameters), avoid `shell=True`
+  and `Runtime.exec`, disable external entity resolution (XXE) in XML parsers.
+
+[A06:2025] Insecure Design (CWE-1059, CWE-307)
+- Threat: Flaws in architectural design such as missing rate limits on login/reset
+  endpoints, lack of business logic constraints, and unconstrained resource consumption.
+- Defenses: Threat modeling, rate limiting (token bucket / Leaky Bucket), CAPTCHA
+  on credential endpoints, strict pagination, and schema validation.
+
+[A07:2025] Authentication Failures (CWE-798, CWE-345, CWE-347)
+- Threat: Hardcoded API keys, tokens, or passwords; weak session IDs; insecure JWT
+  verification; lack of multi-factor authentication for sensitive actions.
+- Defenses: Externalize secrets to environment variables or secret vaults (HashiCorp
+  Vault, AWS Secrets Manager), enforce JWT signature validation and algorithm whitelists.
+
+[A08:2025] Software or Data Integrity Failures (CWE-502, CWE-94)
+- Threat: Deserializing untrusted byte streams (Python pickle, Java ObjectInputStream)
+  leading to arbitrary remote code execution (RCE) via gadget chains.
+- Defenses: Restrict serialization to JSON/Protocol Buffers with explicit schema
+  validation; use ObjectInputFilter in Java; avoid `pickle.loads` on external data.
+
+[A09:2025] Security Logging and Alerting Failures (CWE-532, CWE-117)
+- Threat: Leakage of secrets, passwords, or PII into system log files; lack of
+  audit trails for high-risk actions; log injection via unescaped newlines.
+- Defenses: Sanitize log messages (strip CRLF characters), mask sensitive credentials,
+  maintain immutable audit trails for auth events and financial transactions.
+
+[A10:2025] Mishandling of Exceptional Conditions (CWE-755, CWE-390, CWE-404)
+- Threat: Suppressing exceptions with bare `except: pass` or empty `catch (Exception e) {}`
+  blocks, masking authorization or database crashes, leaving system in inconsistent state.
+- Defenses: Catch specific exception classes, log diagnostic context with stack traces,
+  clean up resources via `finally` or `try-with-resources`, return clean HTTP errors.
+
+
+================================================================================
+SECTION 3: COMMON WEAKNESS ENUMERATION (CWE TOP 40) DICTIONARY
+================================================================================
+- CWE-22   : Improper Limitation of Pathname ('Path Traversal' / Directory Escape)
+- CWE-78   : OS Command Injection (Executing arbitrary binaries via shell metacharacters)
+- CWE-79   : Cross-Site Scripting (Reflected / Stored / DOM XSS via unescaped output)
+- CWE-89   : SQL Injection (Altering database query logic via unescaped input)
+- CWE-90   : LDAP Injection (Manipulating LDAP directory queries and filters)
+- CWE-94   : Dynamic Code Injection (eval(), exec(), compile() on untrusted strings)
+- CWE-117  : Log Injection / CRLF Injection (Injecting fake log entries via \r\n)
+- CWE-200  : Exposure of Sensitive Information to an Unauthorized Actor
+- CWE-215  : Information Disclosure Through Debug Mode (Exposed stack traces / PIN console)
+- CWE-287  : Improper Authentication (Bypassing authentication gates on endpoints)
+- CWE-307  : Improper Restriction of Excessive Authentication Attempts (Missing rate limit)
+- CWE-326  : Inadequate Encryption Strength (Keys < 2048 bits RSA or < 256 bits AES)
+- CWE-327  : Use of Broken Cryptographic Algorithm (MD5, SHA-1, DES, RC4, AES-ECB)
+- CWE-328  : Use of Weak Cryptographic Hash for Credentials (Plain SHA-256 for passwords)
+- CWE-329  : Predictable Initialization Vector in CBC Mode Encryption
+- CWE-330  : Use of Insufficiently Random Values for Cryptographic Keys
+- CWE-338  : Cryptographically Weak PRNG (random module or java.util.Random for tokens)
+- CWE-345  : Insufficient Verification of Data Authenticity
+- CWE-347  : Improper Verification of Cryptographic Signature (JWT verify=False)
+- CWE-352  : Cross-Site Request Forgery (CSRF) in Stateful Web Sessions
+- CWE-390  : Detection of Error Condition Without Action (Silent failure / pass)
+- CWE-400  : Uncontrolled Resource Consumption (DoS via oversized input or ReDoS)
+- CWE-404  : Improper Resource Shutdown or Release (Unclosed DB connections / sockets)
+- CWE-434  : Unrestricted Upload of Dangerous File Types (Executable web shells)
+- CWE-502  : Deserialization of Untrusted Data (Pickle, YAML load, ObjectInputStream RCE)
+- CWE-532  : Sensitive Information in Application Log Files (Credentials, tokens, PII)
+- CWE-611  : XML External Entity Reference Injection (XXE file disclosure / SSRF)
+- CWE-639  : Insecure Direct Object Reference (IDOR / Broken Object-Level Authorization)
+- CWE-755  : Improper Handling of Exceptional Conditions (Masking fatal failures)
+- CWE-798  : Hardcoded Secrets, Passwords, API Keys, and Private Tokens in Code
+- CWE-862  : Missing Authorization Check on Function or Endpoint
+- CWE-918  : Server-Side Request Forgery (SSRF against cloud metadata / internal ports)
+- CWE-942  : Overly Permissive CORS Policy with Credentials Allowed (origins = '*')
+- CWE-1059 : Incomplete Documentation of Architectural Security Design
+- CWE-1104 : Use of Unmaintained Third-Party Software Components
+- CWE-1395 : Dependency on Vulnerable Third-Party Library (Known CVEs)
+
+
+================================================================================
+SECTION 4: PYTHON SECURE CODING STANDARDS & CODE RECIPES
+================================================================================
+
+4.1 SQL Injection Prevention (CWE-89)
+--------------------------------------
+VULNERABLE:
+  cursor.execute(f"SELECT * FROM users WHERE username = '{username}'")
+  cursor.execute("SELECT * FROM items WHERE category = '%s'" % category)
+
+SECURE:
+  # Using SQLite3 / DB-API 2.0 Parameterization
+  cursor.execute("SELECT * FROM users WHERE username = ? AND is_active = 1", (username,))
+  
+  # Using SQLAlchemy 2.0 Parameterized ORM Queries
+  stmt = select(User).where(User.username == username, User.is_active.is_(True))
+  result = session.execute(stmt).scalars().first()
+
+4.2 Path Traversal & ZipSlip File Security (CWE-22)
+---------------------------------------------------
+VULNERABLE:
+  file_path = f"/var/data/uploads/{filename}"
+  with open(file_path, "rb") as f:
+      return f.read()
+
+SECURE:
+  from pathlib import Path
+  from fastapi import HTTPException
+  
+  BASE_STORAGE = Path("/var/data/uploads").resolve()
+  target = (BASE_STORAGE / filename).resolve()
+  
+  if not target.is_relative_to(BASE_STORAGE) or not target.exists():
+      raise HTTPException(status_code=403, detail="Access denied: invalid file path")
+  return target.read_bytes()
+
+4.3 Remote Code Execution via Pickle Deserialization (CWE-502)
+--------------------------------------------------------------
+VULNERABLE:
+  import pickle
+  data = pickle.loads(untrusted_network_bytes)
+
+SECURE:
+  import json
+  from pydantic import BaseModel
+  
+  class UserPayload(BaseModel):
+      user_id: int
+      username: str
+      email: str
+  
+  data = UserPayload.model_validate_json(untrusted_network_bytes.decode("utf-8"))
+
+4.4 OS Command Injection Prevention (CWE-78)
+--------------------------------------------
+VULNERABLE:
+  os.system(f"ping -c 1 {host_ip}")
+  subprocess.Popen(f"ls -l {user_dir}", shell=True)
+
+SECURE:
+  import subprocess
+  import ipaddress
+  
+  ip_obj = ipaddress.ip_address(host_ip)
+  result = subprocess.run(
+      ["ping", "-c", "1", str(ip_obj)],
+      shell=False,
+      capture_output=True,
+      text=True,
+      check=True
+  )
+
+4.5 Password Hashing & Cryptographic Entropy (CWE-327, CWE-328, CWE-338)
+------------------------------------------------------------------------
+VULNERABLE:
+  import hashlib, random
+  password_hash = hashlib.md5(password.encode()).hexdigest()
+  session_token = hex(random.getrandbits(128))
+
+SECURE:
+  import bcrypt, secrets
+  
+  # Hash Password
+  salt = bcrypt.gensalt(rounds=12)
+  hashed = bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+  
+  # Generate Token
+  session_token = secrets.token_urlsafe(32)
+
+4.6 SSRF Egress Defense (CWE-918)
+---------------------------------
+VULNERABLE:
+  import requests
+  return requests.get(user_supplied_url).text
+
+SECURE:
+  import ipaddress, socket, requests
+  from urllib.parse import urlparse
+  
+  def safe_fetch(url: str) -> str:
+      parsed = urlparse(url)
+      if parsed.scheme not in ("http", "https"):
+          raise ValueError("Scheme must be HTTP/HTTPS")
+      ip = ipaddress.ip_address(socket.gethostbyname(parsed.hostname))
+      if ip.is_private or ip.is_loopback or ip.is_link_local:
+          raise SecurityError("Access to internal networks is forbidden")
+      return requests.get(url, timeout=3, allow_redirects=False).text
+
+
+================================================================================
+SECTION 5: JAVA ENTERPRISE SECURE CODING STANDARDS & SPRING BOOT RECIPES
+================================================================================
+
+5.1 SQL & JPQL Injection Prevention (CWE-89)
+--------------------------------------------
+VULNERABLE:
+  Statement stmt = connection.createStatement();
+  ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE email = '" + email + "'");
+
+SECURE:
+  String sql = "SELECT * FROM users WHERE email = ? AND is_active = ?";
+  try (PreparedStatement ps = connection.prepareStatement(sql)) {
+      ps.setString(1, email);
+      ps.setBoolean(2, true);
+      try (ResultSet rs = ps.executeQuery()) {
+          // Process records safely
+      }
+  }
+
+5.2 Spring Security Role-Based Access Control & IDOR Defense (CWE-862, CWE-639)
+-------------------------------------------------------------------------------
+VULNERABLE:
+  @GetMapping("/invoices/{id}")
+  public Invoice getInvoice(@PathVariable Long id) {
+      return invoiceRepository.findById(id).orElseThrow();
+  }
+
+SECURE:
+  @PreAuthorize("#id == authentication.principal.id or hasRole('FINANCE_ADMIN')")
+  @GetMapping("/invoices/{id}")
+  public InvoiceDTO getInvoice(@PathVariable Long id) {
+      Invoice invoice = invoiceRepository.findById(id)
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
+      return invoiceMapper.toDto(invoice);
+  }
+
+5.3 Java Deserialization Defense & ObjectInputFilter (CWE-502)
+--------------------------------------------------------------
+VULNERABLE:
+  ObjectInputStream ois = new ObjectInputStream(clientSocket.getInputStream());
+  Object obj = ois.readObject();
+
+SECURE:
+  ObjectMapper mapper = new ObjectMapper();
+  mapper.deactivateDefaultTyping();
+  UserDTO user = mapper.readValue(clientSocket.getInputStream(), UserDTO.class);
+
+5.4 XML External Entity (XXE) Prevention (CWE-611)
+--------------------------------------------------
+VULNERABLE:
+  DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+  Document doc = dbf.newDocumentBuilder().parse(inputStream);
+
+SECURE:
+  DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+  dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+  dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
+  dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+  dbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+  Document doc = dbf.newDocumentBuilder().parse(inputStream);
+
+5.5 Symmetric Encryption with AES-256-GCM (CWE-327, CWE-329)
+-------------------------------------------------------------
+VULNERABLE:
+  Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding"); // ECB mode leaks structural patterns
+  cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+
+SECURE:
+  byte[] iv = new byte[12]; // 96-bit nonce
+  SecureRandom.getInstanceStrong().nextBytes(iv);
+  Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+  GCMParameterSpec spec = new GCMParameterSpec(128, iv); // 128-bit authentication tag
+  cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec);
+  byte[] cipherText = cipher.doFinal(plainText);
+
+
+================================================================================
+SECTION 6: CRYPTOGRAPHIC IMPLEMENTATION STANDARDS
+================================================================================
+1. Symmetric Ciphers:
+   - Primary: AES-256-GCM (Galois/Counter Mode).
+   - Tag Length: 128 bits (16 bytes).
+   - IV / Nonce: Exactly 96 bits (12 bytes), generated via cryptographic PRNG.
+   - Forbid: AES-ECB, DES, 3DES, Blowfish, RC4.
+
+2. Asymmetric Cryptography:
+   - RSA: Minimum 2048-bit keys (3072-bit recommended for 2025+). OAEP padding for encryption.
+   - Elliptic Curve: Ed25519 (signatures), Curve25519 / X25519 (key exchange), ECDSA P-256.
+
+3. Transport Layer Security:
+   - Minimum: TLS 1.2 (TLS 1.3 preferred).
+   - Disable SSLv2, SSLv3, TLS 1.0, TLS 1.1.
+   - Enforce HSTS (Strict-Transport-Security: max-age=31536000; includeSubDomains).
+
+
+================================================================================
+SECTION 7: CODE SMELLS, DESIGN ANTI-PATTERNS & REFACTORING RULES
+================================================================================
+1. Cyclomatic Complexity Limit:
+   - Maximum 10 per method/function.
+   - Refactor via Extract Method, Strategy Pattern, and early return Guard Clauses.
+
+2. God Class / Monolithic Controller Anti-Pattern:
+   - Threshold: Classes exceeding 300 lines or > 15 public methods.
+   - Refactor by splitting into Single Responsibility Principle (SRP) service delegates.
+
+3. Deep Nesting Anti-Pattern:
+   - Threshold: Nesting depth > 3 levels.
+   - Refactor by inverting conditional logic and failing fast with early returns.
+
+4. Long Parameter List:
+   - Threshold: > 4 parameters.
+   - Refactor into Command DTOs, Java Records, or Pydantic models.
+
+
+================================================================================
+SECTION 8: DEVSECOPS CI/CD AUTOMATED SECURITY GATES
+================================================================================
+- Pull Request Gate Verdict Policy:
+  - Severity CRITICAL: Immediate merge block (Health score impact: -30)
+  - Severity HIGH: Immediate merge block (Health score impact: -20)
+  - Severity MEDIUM: Merge conditional on security sign-off (-10)
+  - Minimum Passing Health Score: 80 / 100
+- Pre-Commit Scanning: Run `python cli.py scan <source-file>` prior to commit staging.
+================================================================================

@@ -6,7 +6,11 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 DATA_DIR = BASE_DIR / "data"
 VECTOR_STORE_DIR = DATA_DIR / "vector_store"
-DOCS_DIR = BASE_DIR / "rag" / "documents"
+ROOT_DOCS_DIR = PROJECT_ROOT / "documents"
+RAG_DOCS_DIR = BASE_DIR / "rag" / "documents"
+DOCS_DIR = ROOT_DOCS_DIR if ROOT_DOCS_DIR.exists() else RAG_DOCS_DIR
+SECURE_CODING_TXT = PROJECT_ROOT / "secure_coding.txt"
+SEED_DATA_DIR = DATA_DIR / "seed_data"
 SAMPLES_DIR = BASE_DIR / "test_samples"
 
 # Load .env file
@@ -25,7 +29,9 @@ except ImportError:
 # Ensure directories exist
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
-DOCS_DIR.mkdir(parents=True, exist_ok=True)
+RAG_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+if ROOT_DOCS_DIR.exists():
+    ROOT_DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Application Settings
 APP_NAME = "AI Code Review & Security Analysis Agent"
@@ -33,7 +39,10 @@ APP_VERSION = "1.0.0"
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", 8000))
 
-# LLM & Embedding Settings (Optional API keys, fallback to local deterministic RAG)
+# LLM & Embedding Settings:
+# NOTE: GEMINI_API_KEY is used EXCLUSIVELY for the interactive Conversational Code Assistant (Chatbot).
+# All code scanning, AST parsing, OWASP security rules, remediation diffs, and RAG vector store indexing
+# run 100% locally and deterministically with zero external LLM dependencies or token consumption.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 USE_FALLBACK_EMBEDDINGS = True

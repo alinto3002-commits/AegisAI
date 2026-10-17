@@ -34,9 +34,10 @@ class ConversationalCodeAssistant(BaseAgent):
 
         # Priority order of supported models on Google API
         models_to_try = [
-            "gemini-3-flash-preview",
             "gemini-3.8-flash",
+            "gemini-3-flash-preview",
             "gemini-flash-latest",
+            "gemini-2.5-flash-lite",
             "gemini-pro-latest",
         ]
         for model in models_to_try:

@@ -1,0 +1,325 @@
+[
+  {
+    "id": "PY-SEC-01",
+    "category": "Secure Coding Practice",
+    "title": "Preventing SQL Injection in Python DB-API and ORMs",
+    "owasp_id": "A05:2025",
+    "cwe_id": "CWE-89",
+    "language": "python",
+    "tags": ["python", "sqlite", "postgresql", "sqlalchemy", "injection", "parameterization"],
+    "content": "In Python, string interpolation (% formatting, .format(), or f-strings) used to construct database queries allows attackers to break out of query logic and execute arbitrary SQL commands. Python DB-API 2.0 compliant drivers and ORMs like SQLAlchemy and Django ORM require parameterized query placeholders (? or %s or :name) with parameters passed as a separate tuple or dictionary.",
+    "vulnerable_example": "cursor.execute(f\"SELECT * FROM users WHERE email = '{user_input}'\")\ncursor.execute(\"SELECT * FROM users WHERE email = '%s'\" % user_input)",
+    "secure_example": "# Using DB-API parameterized tuple:\ncursor.execute(\"SELECT * FROM users WHERE email = ?\", (user_input,))\n\n# Using SQLAlchemy ORM:\nsession.query(User).filter(User.email == user_input).first()",
+    "remediation_guidelines": [
+      "Always pass values as separate parameter arguments, never format into the SQL string.",
+      "Use ORM parameter bindings where applicable."
+    ]
+  },
+  {
+    "id": "PY-SEC-02",
+    "category": "Secure Coding Practice",
+    "title": "Safe Process Execution without Shell Invocation",
+    "owasp_id": "A05:2025",
+    "cwe_id": "CWE-78",
+    "language": "python",
+    "tags": ["python", "subprocess", "command-injection", "shell=True", "os.system"],
+    "content": "Invoking system shells via os.system(), os.popen(), or subprocess.Popen(..., shell=True) enables command injection if any variable contains shell metacharacters (; | && ` $). Safe execution requires passing the command and arguments as a list of strings with shell=False (the default).",
+    "vulnerable_example": "import os, subprocess\nos.system('ping ' + host)\nsubprocess.check_output(f'ls -la {user_dir}', shell=True)",
+    "secure_example": "import subprocess\n# Pass arguments as a list with shell=False:\nsubprocess.run(['ping', '-c', '1', host], check=True, shell=False)",
+    "remediation_guidelines": [
+      "Never use shell=True or os.system() with dynamic user input.",
+      "Always supply arguments as an explicit sequence of strings.",
+      "Validate input format with regex or standard libraries before passing to subprocess."
+    ]
+  },
+  {
+    "id": "PY-SEC-03",
+    "category": "Code Quality & Smells",
+    "title": "Eliminating Bare Except Clauses and Silent Failures",
+    "owasp_id": "A10:2025",
+    "cwe_id": "CWE-755",
+    "language": "python",
+    "tags": ["python", "pep8", "code-smell", "bare-except", "exception-handling"],
+    "content": "PEP 8 explicitly warns against bare 'except:' clauses. A bare except catches SystemExit, KeyboardInterrupt, and all unexpected exceptions, making the program difficult to stop, masking bugs, and causing silent security failures where broken operations fail open.",
+    "vulnerable_example": "try:\n    validate_token(token)\nexcept:\n    pass # Silently swallows authentication errors!",
+    "secure_example": "import logging\nlogger = logging.getLogger(__name__)\n\ntry:\n    validate_token(token)\nexcept (InvalidTokenError, TokenExpiredError) as err:\n    logger.warning('Token validation failed: %s', err)\n    raise HTTPException(status_code=401, detail='Invalid or expired token')",
+    "remediation_guidelines": [
+      "Catch specific, expected exception classes instead of bare except or generic Exception.",
+      "Never use 'pass' in exception blocks without logging or defensive fallback.",
+      "Adhere to PEP 8 exception handling standards."
+    ]
+  },
+  {
+    "id": "PY-SEC-04",
+    "category": "Secure Coding Practice",
+    "title": "Preventing Insecure Deserialization in Python",
+    "owasp_id": "A08:2025",
+    "cwe_id": "CWE-502",
+    "language": "python",
+    "tags": ["python", "pickle", "yaml", "deserialization", "rce"],
+    "content": "Python's pickle, marshal, and shelve modules are not secure against erroneous or maliciously constructed data. The pickle protocol allows execution of arbitrary Python callables upon unpickling via __reduce__. PyYAML's yaml.load() also creates arbitrary Python objects unless Loader=yaml.SafeLoader is specified.",
+    "vulnerable_example": "import pickle, yaml\ndata = pickle.loads(user_payload)\nconfig = yaml.load(user_text) # PyYAML unsafe default in old versions",
+    "secure_example": "import json, yaml\n# Safe structured JSON:\ndata = json.loads(user_payload)\n# Safe YAML loader:\nconfig = yaml.safe_load(user_text)",
+    "remediation_guidelines": [
+      "Never unpickle untrusted or unauthenticated data.",
+      "Always use yaml.safe_load() instead of yaml.load().",
+      "Use JSON, Protocol Buffers, or messagepack for cross-boundary data transfer."
+    ]
+  },
+  {
+    "id": "PY-SEC-05",
+    "category": "Secure Coding Practice",
+    "title": "Path Traversal and ZipSlip Prevention in Python",
+    "owasp_id": "A01:2025",
+    "cwe_id": "CWE-22",
+    "language": "python",
+    "tags": ["python", "path-traversal", "pathlib", "zipfile", "file-upload"],
+    "content": "Using unsanitized filenames in open(), os.remove(), or zipfile.extractall() allows path traversal via '../' sequences, enabling arbitrary file overwrite or system file disclosure. Using pathlib.Path.resolve() and verifying is_relative_to() ensures file operations remain restricted to safe root directories.",
+    "vulnerable_example": "with open(f'/var/www/uploads/{filename}', 'rb') as f:\n    return f.read()",
+    "secure_example": "from pathlib import Path\nbase_dir = Path('/var/www/uploads').resolve()\ntarget = (base_dir / filename).resolve()\nif not target.is_relative_to(base_dir) or not target.exists():\n    raise PermissionError('Invalid path access attempt')",
+    "remediation_guidelines": [
+      "Canonicalize paths with Path.resolve() and check is_relative_to(base_dir).",
+      "Inspect zip archive member names before extraction to block ZipSlip."
+    ]
+  },
+  {
+    "id": "PY-SEC-06",
+    "category": "Secure Coding Practice",
+    "title": "Broken Access Control & IDOR in Web Frameworks",
+    "owasp_id": "A01:2025",
+    "cwe_id": "CWE-639",
+    "language": "python",
+    "tags": ["python", "idor", "fastapi", "django", "authorization", "rbac"],
+    "content": "Insecure Direct Object References (IDOR) occur when an API uses client-supplied identifiers to access database objects without verifying that the authenticated user possesses permission or ownership of the target resource.",
+    "vulnerable_example": "@app.get('/api/documents/{doc_id}')\ndef get_doc(doc_id: int):\n    return db.query(Document).filter(Document.id == doc_id).first()",
+    "secure_example": "@app.get('/api/documents/{doc_id}')\ndef get_doc(doc_id: int, current_user = Depends(get_current_user)):\n    doc = db.query(Document).filter(Document.id == doc_id, Document.owner_id == current_user.id).first()\n    if not doc:\n        raise HTTPException(status_code=404, detail='Document not found')\n    return doc",
+    "remediation_guidelines": [
+      "Always include the authenticated user ID as a filter condition in database lookups.",
+      "Implement role-based or attribute-based authorization checks."
+    ]
+  },
+  {
+    "id": "PY-SEC-07",
+    "category": "Secure Coding Practice",
+    "title": "Server-Side Request Forgery (SSRF) Prevention in Requests",
+    "owasp_id": "A01:2025",
+    "cwe_id": "CWE-918",
+    "language": "python",
+    "tags": ["python", "ssrf", "requests", "urllib", "cloud-metadata"],
+    "content": "When Python applications fetch URLs provided by users (webhooks, avatar importers), attackers supply loopback or cloud metadata addresses (169.254.169.254, 127.0.0.1, 10.0.0.0/8) to steal AWS/GCP credentials or probe internal microservices.",
+    "vulnerable_example": "import requests\nresp = requests.get(user_webhook_url)",
+    "secure_example": "import ipaddress, socket, requests\nfrom urllib.parse import urlparse\n\ndef safe_fetch(url):\n    hostname = urlparse(url).hostname\n    ip = ipaddress.ip_address(socket.gethostbyname(hostname))\n    if ip.is_private or ip.is_loopback or ip.is_link_local:\n        raise ValueError('Access to internal address forbidden')\n    return requests.get(url, timeout=3, allow_redirects=False)",
+    "remediation_guidelines": [
+      "Validate resolved IP addresses against private and link-local address spaces.",
+      "Disable automatic redirect following or re-validate redirect destination IPs."
+    ]
+  },
+  {
+    "id": "PY-SEC-08",
+    "category": "Secure Coding Practice",
+    "title": "Preventing Debug Mode Information Leakage",
+    "owasp_id": "A02:2025",
+    "cwe_id": "CWE-215",
+    "language": "python",
+    "tags": ["python", "debug-mode", "flask", "fastapi", "werkzeug"],
+    "content": "Running Flask, FastAPI, or Django with debug=True in production displays full interactive stack traces, environment variables, database connection strings, and the Werkzeug PIN console which allows remote code execution.",
+    "vulnerable_example": "app.run(debug=True, host='0.0.0.0')\nuvicorn.run('app:app', reload=True, debug=True)",
+    "secure_example": "import os\nDEBUG = os.getenv('ENVIRONMENT') == 'development'\nuvicorn.run('app:app', host='127.0.0.1', port=8000, reload=False)",
+    "remediation_guidelines": [
+      "Always set debug=False in production.",
+      "Use production ASGI/WSGI servers behind a reverse proxy (e.g. Nginx)."
+    ]
+  },
+  {
+    "id": "PY-SEC-09",
+    "category": "Secure Coding Practice",
+    "title": "Hardening Cross-Origin Resource Sharing (CORS) in FastAPI & Flask",
+    "owasp_id": "A02:2025",
+    "cwe_id": "CWE-942",
+    "language": "python",
+    "tags": ["python", "cors", "fastapi", "flask-cors", "headers"],
+    "content": "Configuring CORS with allow_origins=['*'] combined with allow_credentials=True enables third-party malicious websites to execute authenticated cross-origin requests on behalf of logged-in users.",
+    "vulnerable_example": "app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True)",
+    "secure_example": "ALLOWED_ORIGINS = ['https://app.example.com']\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=ALLOWED_ORIGINS,\n    allow_credentials=True,\n    allow_methods=['GET', 'POST', 'PUT', 'DELETE'],\n    allow_headers=['Authorization', 'Content-Type']\n)",
+    "remediation_guidelines": [
+      "Specify explicit domain names in allowed origins instead of wildcards.",
+      "Restrict allowed HTTP methods and request headers to what is necessary."
+    ]
+  },
+  {
+    "id": "PY-SEC-10",
+    "category": "Secure Coding Practice",
+    "title": "Software Supply Chain & Hash Verification in PyPI",
+    "owasp_id": "A03:2025",
+    "cwe_id": "CWE-1104",
+    "language": "python",
+    "tags": ["python", "pip", "supply-chain", "pip-audit", "dependencies"],
+    "content": "Using unpinned package requirements leaves Python projects vulnerable to dependency confusion, upstream package hijacking, and unvetted breaking updates. Enforcing cryptographic SHA-256 hashes ensures build reproducibility and integrity.",
+    "vulnerable_example": "# requirements.txt with unpinned dependencies\nrequests\npyyaml\ncryptography",
+    "secure_example": "# requirements.txt with explicit version and SHA-256 hash\nrequests==2.31.0 --hash=sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f",
+    "remediation_guidelines": [
+      "Pin dependencies with pip-compile --generate-hashes.",
+      "Automate dependency vulnerability scanning using pip-audit in CI pipelines."
+    ]
+  },
+  {
+    "id": "PY-SEC-11",
+    "category": "Secure Coding Practice",
+    "title": "Strong Password Hashing with Bcrypt & Argon2",
+    "owasp_id": "A04:2025",
+    "cwe_id": "CWE-328",
+    "language": "python",
+    "tags": ["python", "bcrypt", "argon2", "passwords", "hashlib"],
+    "content": "Fast general-purpose cryptographic hashes like MD5, SHA-1, and unsalted SHA-256 are vulnerable to high-speed GPU and ASIC offline dictionary attacks. Passwords must be hashed using adaptive, salted, memory-hard algorithms such as Argon2id or Bcrypt with cost factor >= 12.",
+    "vulnerable_example": "import hashlib\ndef hash_pass(p):\n    return hashlib.sha256(p.encode()).hexdigest()",
+    "secure_example": "import bcrypt\ndef hash_pass(p: str) -> str:\n    return bcrypt.hashpw(p.encode('utf-8'), bcrypt.gensalt(12)).decode('utf-8')",
+    "remediation_guidelines": [
+      "Use bcrypt.hashpw or argon2-cffi for all user credential storage.",
+      "Never implement custom hashing schemes."
+    ]
+  },
+  {
+    "id": "PY-SEC-12",
+    "category": "Secure Coding Practice",
+    "title": "Cryptographically Secure Random Number Generation (PEP 506)",
+    "owasp_id": "A04:2025",
+    "cwe_id": "CWE-338",
+    "language": "python",
+    "tags": ["python", "random", "secrets", "prng", "tokens"],
+    "content": "Python's random module uses the Mersenne Twister PRNG, which is completely deterministic and non-cryptographic; observing 624 outputs allows an attacker to reconstruct internal state and predict future tokens. PEP 506 introduced the secrets module for all security-sensitive tokens.",
+    "vulnerable_example": "import random\nreset_token = str(random.randint(100000, 999999))\nsession_id = hex(random.getrandbits(128))",
+    "secure_example": "import secrets\nreset_token = ''.join(secrets.choice('0123456789') for _ in range(6))\nsession_id = secrets.token_urlsafe(32)",
+    "remediation_guidelines": [
+      "Use secrets.token_urlsafe() or secrets.token_hex() for session identifiers and API keys.",
+      "Confine random module usage strictly to simulations and games."
+    ]
+  },
+  {
+    "id": "PY-SEC-13",
+    "category": "Secure Coding Practice",
+    "title": "Symmetric Encryption Standards with AES-256-GCM",
+    "owasp_id": "A04:2025",
+    "cwe_id": "CWE-327",
+    "language": "python",
+    "tags": ["python", "cryptography", "aes-gcm", "encryption", "ciphers"],
+    "content": "Legacy encryption modes like AES-ECB leak plaintext structural patterns, while AES-CBC without HMAC is vulnerable to padding oracle attacks. Modern symmetric encryption must use Authenticated Encryption with Associated Data (AEAD), such as AES-256-GCM with a unique 96-bit nonce.",
+    "vulnerable_example": "from Crypto.Cipher import AES\ncipher = AES.new(key, AES.MODE_ECB) # Insecure ECB mode",
+    "secure_example": "import os\nfrom cryptography.hazmat.primitives.ciphers.aead import AESGCM\naesgcm = AESGCM(key) # 256-bit key\nnonce = os.urandom(12) # 96-bit unique nonce\nciphertext = aesgcm.encrypt(nonce, plaintext, None)",
+    "remediation_guidelines": [
+      "Standardize on AES-GCM or ChaCha20-Poly1305 for symmetric data encryption.",
+      "Ensure nonces/IVs are never reused under the same encryption key."
+    ]
+  },
+  {
+    "id": "PY-SEC-14",
+    "category": "Secure Coding Practice",
+    "title": "XML External Entity (XXE) Injection Prevention with DefusedXML",
+    "owasp_id": "A05:2025",
+    "cwe_id": "CWE-611",
+    "language": "python",
+    "tags": ["python", "xml", "xxe", "defusedxml", "lxml"],
+    "content": "Standard Python XML libraries (xml.etree, minidom, lxml) permit entity expansion and external DTD resolution by default, allowing attackers to read arbitrary server files or cause Denial of Service via billion laughs entity expansion bombs.",
+    "vulnerable_example": "import xml.etree.ElementTree as ET\nroot = ET.fromstring(untrusted_xml)",
+    "secure_example": "import defusedxml.ElementTree as SafeET\nroot = SafeET.fromstring(untrusted_xml)",
+    "remediation_guidelines": [
+      "Use defusedxml package as a drop-in replacement for standard xml parsers.",
+      "Explicitly disable entity resolution and DTD loading in lxml."
+    ]
+  },
+  {
+    "id": "PY-SEC-15",
+    "category": "Secure Coding Practice",
+    "title": "Server-Side Template Injection (SSTI) in Jinja2",
+    "owasp_id": "A05:2025",
+    "cwe_id": "CWE-94",
+    "language": "python",
+    "tags": ["python", "jinja2", "ssti", "flask", "templates"],
+    "content": "Rendering templates constructed via string formatting rather than passing dynamic values into template context variables allows attackers to inject Jinja2 expressions ({{ config.items() }} or MRO gadget chains) leading to remote code execution.",
+    "vulnerable_example": "from flask import render_template_string\nreturn render_template_string(f'Hello {username}')",
+    "secure_example": "from flask import render_template\nreturn render_template('hello.html', username=username)",
+    "remediation_guidelines": [
+      "Never pass untrusted user input directly as template source code.",
+      "Always pass variables into the template context dictionary."
+    ]
+  },
+  {
+    "id": "PY-SEC-16",
+    "category": "Secure Coding Practice",
+    "title": "API Rate Limiting & Denial of Service Protection",
+    "owasp_id": "A06:2025",
+    "cwe_id": "CWE-307",
+    "language": "python",
+    "tags": ["python", "rate-limiting", "slowapi", "dos", "brute-force"],
+    "content": "Exposing authentication, registration, or computationally expensive endpoints without rate limits allows attackers to perform credential stuffing, account brute-forcing, and resource exhaustion.",
+    "vulnerable_example": "@app.post('/api/login')\ndef login(data: LoginSchema):\n    return auth_service.authenticate(data)",
+    "secure_example": "from slowapi import Limiter\nfrom slowapi.util import get_remote_address\nlimiter = Limiter(key_func=get_remote_address)\n\n@app.post('/api/login')\n@limiter.limit('5/minute')\ndef login(request: Request, data: LoginSchema):\n    return auth_service.authenticate(data)",
+    "remediation_guidelines": [
+      "Apply token bucket or sliding window rate limiting on sensitive API endpoints.",
+      "Use Redis for distributed multi-instance rate limit coordination."
+    ]
+  },
+  {
+    "id": "PY-SEC-17",
+    "category": "Secure Coding Practice",
+    "title": "Externalizing Hardcoded Secrets & Environment Configuration",
+    "owasp_id": "A07:2025",
+    "cwe_id": "CWE-798",
+    "language": "python",
+    "tags": ["python", "secrets", "api-key", "pydantic-settings", "env"],
+    "content": "Hardcoding API tokens, database connection strings, and private encryption keys directly in Python scripts risks accidental leakage in version control and sharing across untrusted environments.",
+    "vulnerable_example": "STRIPE_KEY = 'sk_live_51ABCDEF1234567890'\nDB_URL = 'postgresql://admin:supersecret@db.prod:5432/main'",
+    "secure_example": "import os\nfrom pydantic_settings import BaseSettings\n\nclass Settings(BaseSettings):\n    stripe_key: str\n    db_url: str\n    class Config:\n        env_file = '.env'\n\nsettings = Settings()",
+    "remediation_guidelines": [
+      "Load configuration strictly from environment variables or secure cloud secret stores.",
+      "Add .env and credential files to .gitignore."
+    ]
+  },
+  {
+    "id": "PY-SEC-18",
+    "category": "Secure Coding Practice",
+    "title": "Secure JWT Token Verification & Algorithm Enforcement",
+    "owasp_id": "A07:2025",
+    "cwe_id": "CWE-347",
+    "language": "python",
+    "tags": ["python", "jwt", "pyjwt", "authentication", "tokens"],
+    "content": "Decoding JWT tokens with verify_signature=False or omitting explicit algorithm whitelisting allows attackers to bypass authentication using algorithm confusion attacks or forge unsigned tokens with alg='none'.",
+    "vulnerable_example": "import jwt\npayload = jwt.decode(token, options={'verify_signature': False})",
+    "secure_example": "import jwt\npayload = jwt.decode(\n    token,\n    SECRET_KEY,\n    algorithms=['HS256'],\n    options={'require': ['exp', 'sub', 'iat']}\n)",
+    "remediation_guidelines": [
+      "Explicitly enforce algorithm whitelisting in jwt.decode(algorithms=['HS256']).",
+      "Always verify expiration (exp) and subject (sub) claims."
+    ]
+  },
+  {
+    "id": "PY-SEC-19",
+    "category": "Secure Coding Practice",
+    "title": "Preventing Dynamic Code Execution (eval, exec, compile)",
+    "owasp_id": "A08:2025",
+    "cwe_id": "CWE-94",
+    "language": "python",
+    "tags": ["python", "eval", "exec", "ast", "rce", "code-injection"],
+    "content": "Invoking Python's eval() or exec() with user-controlled input executes arbitrary Python bytecodes within the current interpreter context, resulting in immediate host compromise.",
+    "vulnerable_example": "result = eval(user_math_expression)",
+    "secure_example": "import ast\n# For mathematical expressions, evaluate with an AST node visitor:\ndef safe_eval(node):\n    if isinstance(node, ast.Constant):\n        return node.value\n    elif isinstance(node, ast.BinOp):\n        # Safely evaluate binary operators only\n        pass",
+    "remediation_guidelines": [
+      "Never call eval() or exec() on user-supplied strings.",
+      "Use ast.literal_eval() strictly for literal data structures, or build an AST whitelist visitor."
+    ]
+  },
+  {
+    "id": "PY-SEC-20",
+    "category": "Secure Coding Practice",
+    "title": "Sanitizing Log Outputs and Preventing Credential Leakage",
+    "owasp_id": "A09:2025",
+    "cwe_id": "CWE-532",
+    "language": "python",
+    "tags": ["python", "logging", "crlf", "pii", "credentials"],
+    "content": "Logging raw passwords, authorization tokens, or unsanitized user inputs exposes credentials in log management systems and allows attackers to forge log entries via CRLF injection (\\r\\n).",
+    "vulnerable_example": "logger.info(f'User login failed for {username} with password {password}')",
+    "secure_example": "clean_user = username.replace('\\r', '').replace('\\n', '')\nlogger.warning('Authentication failure for user: %s', clean_user)",
+    "remediation_guidelines": [
+      "Strip newline characters from log arguments to prevent log injection.",
+      "Never log raw credentials, session tokens, or sensitive personal data."
+    ]
+  }
+]
