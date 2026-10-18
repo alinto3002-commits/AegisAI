@@ -52,21 +52,8 @@ An automated, intelligent multi-agent platform for reviewing code quality, detec
 ```bash
 python run.py
 ```
-This automatically seeds the ChromaDB knowledge base and starts the web server on `http://127.0.0.1:8000`.
 
-### 2. Access the Developer Portal
-Open your browser and navigate to:
-```
-http://127.0.0.1:8000
-```
-
-### 3. API Documentation
-Explore the interactive Swagger OpenAPI docs at:
-```
-http://127.0.0.1:8000/docs
-```
-
-### 4. Command-Line Interface (CLI)
+### 2. Command-Line Interface (CLI)
 You can also run scans, check syntax, or query the knowledge base from your terminal:
 ```bash
 # Scan a source file and output review findings
