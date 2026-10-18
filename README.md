@@ -69,7 +69,7 @@ python cli.py validate backend/test_samples/java/VulnerableAuthApp.java
 python cli.py kb-search "SQL injection prepared statements"
 ```
 
-### 5. Automated Test Suite (100% Pass Rate)
+### 3. Automated Test Suite (100% Pass Rate)
 Run the complete test suite with `pytest`:
 ```bash
 python -m pytest tests/ -v
