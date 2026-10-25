@@ -1,6 +1,7 @@
 import uuid
 import logging
 import time
+import concurrent.futures
 from typing import Dict, Any, List
 
 from backend.modules.submission import CodeSubmissionModule
@@ -165,23 +166,28 @@ class MultiAgentOrchestrator:
                 agent_execution_times=timings,
             )
 
-        # Step 2: Code Analysis Agent
-        t0 = time.perf_counter()
-        quality_findings = self.code_agent.run(
-            code=submission.code,
-            language=validation.language,
-            ast_summary=validation.ast_summary,
-        )
-        timings["code_analysis_agent"] = round(time.perf_counter() - t0, 4)
+        # Steps 2 & 3: Run Code Analysis Agent and Security Vulnerability Agent in parallel (Milestone 2.3)
+        t_parallel_start = time.perf_counter()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            future_code = executor.submit(
+                self.code_agent.run,
+                code=submission.code,
+                language=validation.language,
+                ast_summary=validation.ast_summary,
+            )
+            future_sec = executor.submit(
+                self.sec_agent.run,
+                code=submission.code,
+                language=validation.language,
+                filename=validation.filename,
+            )
+            quality_findings = future_code.result()
+            security_findings = future_sec.result()
 
-        # Step 3: Security Vulnerability Agent (OWASP 2025)
-        t0 = time.perf_counter()
-        security_findings = self.sec_agent.run(
-            code=submission.code,
-            language=validation.language,
-            filename=validation.filename,
-        )
-        timings["security_agent"] = round(time.perf_counter() - t0, 4)
+        elapsed_parallel = round(time.perf_counter() - t_parallel_start, 4)
+        timings["code_analysis_agent"] = elapsed_parallel
+        timings["security_agent"] = elapsed_parallel
+        timings["parallel_execution"] = elapsed_parallel
 
         # Step 4: Remediation Agent (RAG-grounded fix suggestions)
         all_findings = quality_findings + security_findings
