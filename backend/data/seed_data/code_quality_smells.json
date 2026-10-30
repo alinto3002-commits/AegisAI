@@ -5,7 +5,12 @@
     "title": "Long Method / Excessive Function Length",
     "cwe_id": "CWE-1075",
     "language": "general",
-    "tags": ["maintainability", "refactoring", "clean-code", "single-responsibility"],
+    "tags": [
+      "maintainability",
+      "refactoring",
+      "clean-code",
+      "single-responsibility"
+    ],
     "content": "Methods or functions exceeding 30-40 lines of code frequently violate the Single Responsibility Principle (SRP). They are difficult to comprehend, test, and maintain, and they often hide subtle control-flow bugs or security validation gaps.",
     "vulnerable_example": "def process_order(user_id, cart_items, payment_info, shipping_address):\n    # 100+ lines doing validation, calculating discounts, calling 3 APIs,\n    # updating database, sending email, generating PDF invoice...",
     "secure_example": "def process_order(user_id: str, order_request: OrderRequest) -> OrderReceipt:\n    validate_cart(order_request.cart_items)\n    total = calculate_order_total(order_request.cart_items, order_request.discount_code)\n    payment = charge_payment(user_id, total, order_request.payment_info)\n    order = record_order(user_id, order_request, payment.transaction_id)\n    dispatch_order_confirmation(user_id, order)\n    return OrderReceipt(order_id=order.id, status='CONFIRMED')",
@@ -20,7 +25,12 @@
     "title": "High Cyclomatic Complexity & Deep Nesting",
     "cwe_id": "CWE-1075",
     "language": "general",
-    "tags": ["complexity", "nesting", "cognitive-load", "guard-clauses"],
+    "tags": [
+      "complexity",
+      "nesting",
+      "cognitive-load",
+      "guard-clauses"
+    ],
     "content": "Cyclomatic complexity measures the number of linearly independent paths through program source code. High complexity (> 10) and deep indentation levels (> 3 levels of nested if/for/while blocks) exponentially increase bug frequency and obscure security logic.",
     "vulnerable_example": "if user:\n    if user.is_active:\n        if user.has_role('editor'):\n            if document:\n                if document.status == 'DRAFT':\n                    # deep nested logic...",
     "secure_example": "# Using Guard Clauses to flatten nesting:\nif not user or not user.is_active:\n    return PermissionDenied()\nif not user.has_role('editor'):\n    return UnauthorizedRole()\nif not document or document.status != 'DRAFT':\n    return InvalidDocumentState()\n# Flat, readable happy-path execution...",
@@ -36,13 +46,39 @@
     "title": "God Class / Bloated Component",
     "cwe_id": "CWE-1061",
     "language": "general",
-    "tags": ["oop", "anti-pattern", "solid", "architecture"],
+    "tags": [
+      "oop",
+      "anti-pattern",
+      "solid",
+      "architecture"
+    ],
     "content": "A God Class accumulates excessive duties, manages too many disparate concerns, and aggregates dozens of methods and state variables. This makes unit testing nearly impossible and encourages tight coupling across an application.",
     "vulnerable_example": "public class SystemManager {\n    public void handleAuthentication() { ... }\n    public void sendEmailNotification() { ... }\n    public void renderHtmlPage() { ... }\n    public void executeDatabaseMigration() { ... }\n    public void processPayment() { ... }\n}",
     "secure_example": "// Separated into distinct service domain classes:\npublic class AuthenticationService { ... }\npublic class NotificationService { ... }\npublic class PaymentProcessingService { ... }",
     "remediation_guidelines": [
       "Apply the Single Responsibility Principle (SRP) to decompose large classes.",
       "Group cohesive operations into domain-specific service objects or modules."
+    ]
+  },
+  {
+    "id": "SMELL-04",
+    "category": "Code Quality & Documentation",
+    "title": "Missing Docstrings and Code Documentation (PEP 257 / Javadoc)",
+    "cwe_id": "CWE-1078",
+    "language": "general",
+    "tags": [
+      "docstrings",
+      "documentation",
+      "pep-257",
+      "javadoc",
+      "maintainability"
+    ],
+    "content": "Public functions, classes, and methods lacking docstrings impede code understandability, API discoverability, and maintainability (CWE-1078). In Python, adhere to PEP 257 structured docstrings detailing arguments, return types, and exceptions raised. In Java, declare standard Javadoc blocks (@param, @return, @throws).",
+    "vulnerable_example": "def authenticate_user(username, password):\n    # Missing docstring\n    return verify(username, password)",
+    "secure_example": "def authenticate_user(username: str, password: str) -> Optional[User]:\n    \"\"\"Authenticates user credentials against the secure identity store.\n\n    Args:\n        username: Unique account identifier.\n        password: Plaintext password candidate.\n\n    Returns:\n        User object if credentials match; otherwise None.\n\n    Raises:\n        AuthenticationError: If identity provider is unreachable.\n    \"\"\"\n    return verify(username, password)",
+    "remediation_guidelines": [
+      "Add structured docstrings adhering to PEP 257 (Python) or Javadoc (Java).",
+      "Explicitly document all function arguments, return types, and potential raised exceptions."
     ]
   }
 ]

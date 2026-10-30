@@ -76,8 +76,8 @@ def parse_markdown_document(filepath: Path) -> List[Dict[str, Any]]:
         header_line = lines[0].strip()
         title = re.sub(r"^#{1,4}\s*", "", header_line).strip()
 
-        # Skip generic headers like "Table of Contents" or "Sources"
-        if title.lower() in ("table of contents", "sources", "document index", "overview"):
+        # Skip generic headers like "Table of Contents" or "Sources" or "Background"
+        if title.lower() in ("table of contents", "sources", "document index", "overview", "background", "mapped cwes", "references", "references & sources"):
             continue
 
         body = "\n".join(lines[1:]).strip()
@@ -209,8 +209,14 @@ def seed():
     # 2. Ingest Markdown documents
     md_dir = ROOT_DOCS_DIR if ROOT_DOCS_DIR.exists() else RAG_DOCS_DIR
     if md_dir.exists():
+        excluded_md_files = {
+            "README.md",
+            "RAG_ARCHITECTURE_GUIDE.md",
+            "SOURCE_REGISTER.md",
+            "SECURITY_VULNERABILITY_AGENT_WORKFLOW.md",
+        }
         for md_file in md_dir.glob("*.md"):
-            if md_file.name == "README.md":
+            if md_file.name in excluded_md_files:
                 continue
             parsed_chunks = parse_markdown_document(md_file)
             all_docs.extend(parsed_chunks)

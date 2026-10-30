@@ -252,6 +252,24 @@ cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec);
 byte[] cipherText = cipher.doFinal(plainText);
 ```
 
+#### Pattern 3: Insecure Random Number Generation and Cryptographic Randomness with SecureRandom (CWE-338)
+java.util.Random utilizes a linear congruential formula that is deterministic and easily predictable from previous outputs. For security-sensitive tokens, password reset links, session identifiers, and cryptographic keys, use java.security.SecureRandom.
+
+```java
+// ❌ VULNERABLE: java.util.Random used for security-sensitive tokens or keys
+Random random = new Random();
+String resetToken = Long.toHexString(random.nextLong());
+```
+
+```java
+// ✅ SECURE: Cryptographically strong pseudo-random number generation with SecureRandom
+SecureRandom secureRandom = SecureRandom.getInstanceStrong();
+byte[] tokenBytes = new byte[32];
+secureRandom.nextBytes(tokenBytes);
+String resetToken = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+```
+
+
 ---
 
 ### A05:2025 — Injection in Java (SQL, Command, XXE, LDAP)
@@ -477,6 +495,33 @@ try {
     releaseLock(orderId);
 }
 ```
+
+#### Pattern 2: Declaring Generic throws Exception in Method Signatures
+Declaring 'throws Exception' in method signatures breaks exception abstraction, forces callers to catch generic java.lang.Exception, and masks specific failure modes (CWE-398). Methods should declare the specific checked exception types thrown by the operations they perform or wrap them in descriptive unchecked domain exceptions.
+
+```java
+// ❌ VULNERABLE / CODE SMELL: Generic throws Exception in signature
+public byte[] encryptPayload(String data) throws Exception {
+    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+    cipher.init(Cipher.ENCRYPT_MODE, key, spec);
+    return cipher.doFinal(data.getBytes());
+}
+```
+
+```java
+// ✅ SECURE: Specific checked exceptions declared based on operations
+public byte[] encryptPayload(String data) throws GeneralSecurityException {
+    try {
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, key, spec);
+        return cipher.doFinal(data.getBytes());
+    } catch (GeneralSecurityException e) {
+        logger.error("Encryption failed", e);
+        throw e;
+    }
+}
+```
+
 
 ---
 

@@ -6,7 +6,14 @@
     "owasp_id": "A05:2025",
     "cwe_id": "CWE-89",
     "language": "java",
-    "tags": ["java", "jdbc", "preparedstatement", "jpa", "hibernate", "sqli"],
+    "tags": [
+      "java",
+      "jdbc",
+      "preparedstatement",
+      "jpa",
+      "hibernate",
+      "sqli"
+    ],
     "content": "In Java JDBC, building SQL strings with string concatenation (+ operators or StringBuilder) exposes applications to SQL injection. Using java.sql.PreparedStatement ensures SQL syntax and user data are separated at the database engine level. In JPA/Hibernate, always use named parameter binding.",
     "vulnerable_example": "Statement stmt = conn.createStatement();\nString sql = \"SELECT * FROM users WHERE username = '\" + inputUsername + \"' AND password = '\" + inputPassword + \"'\";\nResultSet rs = stmt.executeQuery(sql);",
     "secure_example": "String sql = \"SELECT * FROM users WHERE username = ? AND password = ?\";\ntry (PreparedStatement pstmt = conn.prepareStatement(sql)) {\n    pstmt.setString(1, inputUsername);\n    pstmt.setString(2, inputPassword);\n    try (ResultSet rs = pstmt.executeQuery()) {\n        // Process results safely\n    }\n}",
@@ -22,7 +29,13 @@
     "owasp_id": "A01:2025",
     "cwe_id": "CWE-22",
     "language": "java",
-    "tags": ["java", "file-io", "path-traversal", "nio", "canonicalpath"],
+    "tags": [
+      "java",
+      "file-io",
+      "path-traversal",
+      "nio",
+      "canonicalpath"
+    ],
     "content": "Accepting unvalidated filenames in Java File or java.nio.file.Path constructors allows directory traversal sequences (../ or ..\\) to access files outside the intended root directory. Validating the canonical path or using Path.normalize() and startsWith() prevents path traversal.",
     "vulnerable_example": "File file = new File(\"/var/uploads/\" + request.getParameter(\"filename\"));\nFileInputStream fis = new FileInputStream(file);",
     "secure_example": "Path baseDir = Paths.get(\"/var/uploads\").toRealPath();\nPath requestedPath = baseDir.resolve(request.getParameter(\"filename\")).normalize();\nif (!requestedPath.startsWith(baseDir)) {\n    throw new SecurityException(\"Access denied: Path outside safe root\");\n}\nInputStream is = Files.newInputStream(requestedPath);",
@@ -39,7 +52,13 @@
     "owasp_id": "A08:2025",
     "cwe_id": "CWE-502",
     "language": "java",
-    "tags": ["java", "deserialization", "objectinputstream", "gadget-chains", "rce"],
+    "tags": [
+      "java",
+      "deserialization",
+      "objectinputstream",
+      "gadget-chains",
+      "rce"
+    ],
     "content": "Java standard serialization via java.io.ObjectInputStream allows arbitrary object graphs to be deserialized, triggering gadget chains (e.g. Apache Commons Collections) that lead to remote arbitrary code execution. Migrating to JSON (Jackson) or applying ObjectInputFilter whitelists is required.",
     "vulnerable_example": "ObjectInputStream ois = new ObjectInputStream(clientSocket.getInputStream());\nObject obj = ois.readObject(); // Vulnerable to gadget chains",
     "secure_example": "// Use Jackson with disabled default typing:\nObjectMapper mapper = new ObjectMapper();\nmapper.deactivateDefaultTyping();\nUserPayload payload = mapper.readValue(inputStream, UserPayload.class);\n\n// Or if ObjectInputStream is mandatory, apply ObjectInputFilter (Java 9+):\nObjectInputFilter filter = ObjectInputFilter.Config.createFilter(\"com.myapp.models.*;!*\");\nois.setObjectInputFilter(filter);",
@@ -55,7 +74,13 @@
     "owasp_id": "A01:2025",
     "cwe_id": "CWE-862",
     "language": "java",
-    "tags": ["java", "spring-security", "preauthorize", "idor", "rbac"],
+    "tags": [
+      "java",
+      "spring-security",
+      "preauthorize",
+      "idor",
+      "rbac"
+    ],
     "content": "Relying purely on URL route patterns in HttpSecurity leaves controller methods vulnerable to authorization bypass and Insecure Direct Object References (IDOR). Using Spring Security @PreAuthorize ensures resource ownership is validated at the method invocation level.",
     "vulnerable_example": "@GetMapping(\"/accounts/{id}\")\npublic Account getAccount(@PathVariable Long id) {\n    return accountRepository.findById(id).orElseThrow();\n}",
     "secure_example": "@PreAuthorize(\"#id == authentication.principal.id or hasRole('ADMIN')\")\n@GetMapping(\"/accounts/{id}\")\npublic Account getAccount(@PathVariable Long id) {\n    return accountRepository.findById(id)\n        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));\n}",
@@ -71,7 +96,13 @@
     "owasp_id": "A01:2025",
     "cwe_id": "CWE-918",
     "language": "java",
-    "tags": ["java", "ssrf", "httpclient", "urlconnection", "egress"],
+    "tags": [
+      "java",
+      "ssrf",
+      "httpclient",
+      "urlconnection",
+      "egress"
+    ],
     "content": "Calling URL.openStream() or HttpClient.send() with unvalidated URLs allows attackers to target internal IP spaces, cloud instance metadata services (169.254.169.254), and local management ports.",
     "vulnerable_example": "URL url = new URL(userProvidedUrl);\nInputStream in = url.openStream();",
     "secure_example": "URI uri = URI.create(userProvidedUrl);\nInetAddress addr = InetAddress.getByName(uri.getHost());\nif (addr.isLoopbackAddress() || addr.isSiteLocalAddress() || addr.isLinkLocalAddress()) {\n    throw new SecurityException(\"SSRF blocked: Destination resolves to internal address\");\n}\nHttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();\nHttpResponse<String> resp = client.send(HttpRequest.newBuilder().uri(uri).GET().build(), HttpResponse.BodyHandlers.ofString());",
@@ -87,7 +118,13 @@
     "owasp_id": "A02:2025",
     "cwe_id": "CWE-942",
     "language": "java",
-    "tags": ["java", "spring-security", "cors", "csrf", "headers"],
+    "tags": [
+      "java",
+      "spring-security",
+      "cors",
+      "csrf",
+      "headers"
+    ],
     "content": "Configuring Spring Security with allowedOrigins('*') and allowCredentials(true) allows unauthorized origins to read sensitive data and make cross-site authenticated requests. Disabling CSRF in cookie-authenticated web sessions exposes users to CSRF attacks.",
     "vulnerable_example": "http.csrf().disable();\nCorsConfiguration config = new CorsConfiguration();\nconfig.setAllowedOrigins(List.of(\"*\"));\nconfig.setAllowCredentials(true);",
     "secure_example": "http.csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()));\nCorsConfiguration config = new CorsConfiguration();\nconfig.setAllowedOrigins(List.of(\"https://app.example.com\"));\nconfig.setAllowedMethods(List.of(\"GET\", \"POST\", \"PUT\", \"DELETE\"));\nconfig.setAllowCredentials(true);",
@@ -103,7 +140,13 @@
     "owasp_id": "A02:2025",
     "cwe_id": "CWE-215",
     "language": "java",
-    "tags": ["java", "spring-boot", "stacktrace", "actuator", "error-controller"],
+    "tags": [
+      "java",
+      "spring-boot",
+      "stacktrace",
+      "actuator",
+      "error-controller"
+    ],
     "content": "Default Spring Boot error controllers display full class names, stack traces, and framework versions upon runtime exceptions. Actuator endpoints exposed to the public internet leak environment variables, JVM memory metrics, and heap dumps.",
     "vulnerable_example": "# application.properties with debug error messages\nserver.error.include-stacktrace=always\nmanagement.endpoints.web.exposure.include=*",
     "secure_example": "# Hardened application.properties\nserver.error.include-stacktrace=never\nserver.error.include-message=never\nmanagement.endpoints.web.exposure.include=health,info\nmanagement.endpoint.health.show-details=when-authorized",
@@ -119,7 +162,13 @@
     "owasp_id": "A03:2025",
     "cwe_id": "CWE-1104",
     "language": "java",
-    "tags": ["java", "maven", "dependency-check", "supply-chain", "log4j"],
+    "tags": [
+      "java",
+      "maven",
+      "dependency-check",
+      "supply-chain",
+      "log4j"
+    ],
     "content": "Java applications rely on extensive Maven/Gradle dependency trees. Vulnerable libraries (such as unpatched Log4j, Spring Framework, or SnakeYAML) introduce remote code execution risks.",
     "vulnerable_example": "<!-- Unaudited pom.xml dependencies with known CVEs -->\n<dependency>\n    <groupId>org.apache.logging.log4j</groupId>\n    <artifactId>log4j-core</artifactId>\n    <version>2.14.1</version>\n</dependency>",
     "secure_example": "<!-- OWASP Dependency-Check Maven plugin with build break gate -->\n<plugin>\n    <groupId>org.owasp</groupId>\n    <artifactId>dependency-check-maven</artifactId>\n    <version>9.0.9</version>\n    <configuration><failBuildOnCVSS>7.0</failBuildOnCVSS></configuration>\n    <executions><execution><goals><goal>check</goal></goals></execution></executions>\n</plugin>",
@@ -135,7 +184,13 @@
     "owasp_id": "A04:2025",
     "cwe_id": "CWE-328",
     "language": "java",
-    "tags": ["java", "spring-security", "bcrypt", "argon2", "passwords"],
+    "tags": [
+      "java",
+      "spring-security",
+      "bcrypt",
+      "argon2",
+      "passwords"
+    ],
     "content": "Using java.security.MessageDigest with MD5, SHA-1, or plain SHA-256 lacks computational cost and salt protection against rainbow table lookups and GPU brute-forcing.",
     "vulnerable_example": "MessageDigest md = MessageDigest.getInstance(\"MD5\");\nbyte[] digest = md.digest(password.getBytes(StandardCharsets.UTF_8));",
     "secure_example": "@Bean\npublic PasswordEncoder passwordEncoder() {\n    // Work factor 12 for high resistance to offline cracking:\n    return new BCryptPasswordEncoder(12);\n    // Or Argon2: return new Argon2PasswordEncoder(16, 32, 1, 65536, 4);\n}",
@@ -151,7 +206,13 @@
     "owasp_id": "A04:2025",
     "cwe_id": "CWE-338",
     "language": "java",
-    "tags": ["java", "securerandom", "random", "prng", "tokens"],
+    "tags": [
+      "java",
+      "securerandom",
+      "random",
+      "prng",
+      "tokens"
+    ],
     "content": "java.util.Random utilizes a linear congruential formula that is easily predictable from previous outputs. Security tokens, CSRF tokens, and session keys require java.security.SecureRandom.",
     "vulnerable_example": "Random random = new Random();\nint token = random.nextInt(1000000);",
     "secure_example": "SecureRandom secureRandom = SecureRandom.getInstanceStrong();\nbyte[] bytes = new byte[32];\nsecureRandom.nextBytes(bytes);\nString token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);",
@@ -167,7 +228,13 @@
     "owasp_id": "A04:2025",
     "cwe_id": "CWE-327",
     "language": "java",
-    "tags": ["java", "crypto", "aes-gcm", "cipher", "encryption"],
+    "tags": [
+      "java",
+      "crypto",
+      "aes-gcm",
+      "cipher",
+      "encryption"
+    ],
     "content": "Encrypting data with AES in ECB mode leaks structural patterns, and CBC mode without authentication is vulnerable to bit-flipping and padding oracle attacks. AES-GCM provides both confidentiality and message integrity.",
     "vulnerable_example": "Cipher cipher = Cipher.getInstance(\"AES/ECB/PKCS5Padding\");\ncipher.init(Cipher.ENCRYPT_MODE, secretKey);",
     "secure_example": "byte[] iv = new byte[12];\nSecureRandom.getInstanceStrong().nextBytes(iv);\nCipher cipher = Cipher.getInstance(\"AES/GCM/NoPadding\");\nGCMParameterSpec spec = new GCMParameterSpec(128, iv);\ncipher.init(Cipher.ENCRYPT_MODE, secretKey, spec);\nbyte[] cipherText = cipher.doFinal(plainText);",
@@ -183,7 +250,12 @@
     "owasp_id": "A05:2025",
     "cwe_id": "CWE-78",
     "language": "java",
-    "tags": ["java", "processbuilder", "command-injection", "runtime-exec"],
+    "tags": [
+      "java",
+      "processbuilder",
+      "command-injection",
+      "runtime-exec"
+    ],
     "content": "Using Runtime.getRuntime().exec(\"sh -c \" + cmd) passes user input directly to the operating system shell, allowing command separators like &&, |, and ; to execute arbitrary shell scripts.",
     "vulnerable_example": "Runtime.getRuntime().exec(\"ping -c 1 \" + hostName);",
     "secure_example": "if (!hostName.matches(\"^[a-zA-Z0-9.-]+$\")) {\n    throw new IllegalArgumentException(\"Invalid hostname\");\n}\nProcessBuilder pb = new ProcessBuilder(\"ping\", \"-c\", \"1\", hostName);\npb.redirectErrorStream(true);\nProcess process = pb.start();\nint exitCode = process.waitFor();",
@@ -199,7 +271,13 @@
     "owasp_id": "A05:2025",
     "cwe_id": "CWE-611",
     "language": "java",
-    "tags": ["java", "xxe", "xml", "documentbuilder", "saxparser"],
+    "tags": [
+      "java",
+      "xxe",
+      "xml",
+      "documentbuilder",
+      "saxparser"
+    ],
     "content": "Java standard XML factories (DocumentBuilderFactory, SAXParserFactory, XMLInputFactory) resolve external entities by default, allowing attackers to access local server files (/etc/passwd, win.ini) and internal cloud services.",
     "vulnerable_example": "DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();\nDocument doc = dbf.newDocumentBuilder().parse(inputStream);",
     "secure_example": "DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();\ndbf.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);\ndbf.setFeature(\"http://xml.org/sax/features/external-general-entities\", false);\ndbf.setFeature(\"http://xml.org/sax/features/external-parameter-entities\", false);\ndbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);\nDocument doc = dbf.newDocumentBuilder().parse(inputStream);",
@@ -215,7 +293,13 @@
     "owasp_id": "A05:2025",
     "cwe_id": "CWE-90",
     "language": "java",
-    "tags": ["java", "ldap", "jndi", "injection", "directory"],
+    "tags": [
+      "java",
+      "ldap",
+      "jndi",
+      "injection",
+      "directory"
+    ],
     "content": "Concatenating user inputs into LDAP search filter strings allows attackers to alter query logic, retrieve hidden attributes, or bypass corporate authentication filters.",
     "vulnerable_example": "String filter = \"(&(uid=\" + username + \")(userPassword=\" + pass + \"))\";\nNamingEnumeration<SearchResult> results = ctx.search(\"ou=users\", filter, controls);",
     "secure_example": "String filter = \"(&(uid={0})(userPassword={1}))\";\nNamingEnumeration<SearchResult> results = ctx.search(\"ou=users\", filter, new Object[]{username, pass}, controls);",
@@ -231,7 +315,13 @@
     "owasp_id": "A06:2025",
     "cwe_id": "CWE-307",
     "language": "java",
-    "tags": ["java", "bucket4j", "rate-limiting", "spring-boot", "dos"],
+    "tags": [
+      "java",
+      "bucket4j",
+      "rate-limiting",
+      "spring-boot",
+      "dos"
+    ],
     "content": "Unprotected login and sensitive API endpoints allow rapid automated credential stuffing and denial of service. Integrating token-bucket rate limiting via Bucket4j restricts request velocity.",
     "vulnerable_example": "@PostMapping(\"/api/auth/login\")\npublic ResponseEntity<?> login(@RequestBody LoginRequest req) {\n    return authService.authenticate(req);\n}",
     "secure_example": "@Component\npublic class RateLimitFilter extends OncePerRequestFilter {\n    private final Bucket bucket = Bucket.builder()\n        .addLimit(Bandwidth.classic(10, Refill.intervally(10, Duration.ofMinutes(1))))\n        .build();\n    @Override\n    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws Exception {\n        if (!bucket.tryConsume(1)) {\n            res.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());\n            return;\n        }\n        chain.doFilter(req, res);\n    }\n}",
@@ -247,7 +337,13 @@
     "owasp_id": "A07:2025",
     "cwe_id": "CWE-798",
     "language": "java",
-    "tags": ["java", "spring", "secrets", "vault", "credentials"],
+    "tags": [
+      "java",
+      "spring",
+      "secrets",
+      "vault",
+      "credentials"
+    ],
     "content": "Hardcoding API secrets, encryption keys, and database passwords in Java source files or unencrypted application.properties causes credential exposure in source code repositories.",
     "vulnerable_example": "private static final String API_KEY = \"sk-live-12345abcdef67890\";",
     "secure_example": "@Service\npublic class PaymentService {\n    @Value(\"${app.payment.api-key}\")\n    private String apiKey;\n}",
@@ -263,13 +359,24 @@
     "owasp_id": "A07:2025",
     "cwe_id": "CWE-347",
     "language": "java",
-    "tags": ["java", "jwt", "jjwt", "tokens", "authentication"],
-    "content": "Decoding JWT tokens without verifying the cryptographic signature or allowing unsigned alg: none tokens enables authentication bypass.",
+    "tags": [
+      "java",
+      "jwt",
+      "jjwt",
+      "tokens",
+      "authentication",
+      "algorithm-confusion",
+      "asymmetric-signing",
+      "secret-rotation"
+    ],
+    "content": "Decoding JWT tokens without verifying the cryptographic signature or allowing unsigned alg: none tokens enables authentication bypass. Symmetric HMAC signing (HS256) requires high-entropy secrets (>= 256 bits) and strict algorithm allowlisting to prevent algorithm-confusion attacks. Externalize secrets using a dedicated secrets manager and rotate exposed secrets immediately. For distributed microservice architectures where multiple services verify tokens without sharing the private signing key, migrate to asymmetric public/private keys (RS256 or ES256).",
     "vulnerable_example": "Claims claims = Jwts.parser().parseClaimsJwt(token).getBody();",
     "secure_example": "SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));\nClaims claims = Jwts.parserBuilder()\n    .setSigningKey(key)\n    .build()\n    .parseClaimsJws(token)\n    .getBody();",
     "remediation_guidelines": [
-      "Always call parseClaimsJws() with a verified signing key.",
-      "Reject tokens that specify unexpected or weak algorithms."
+      "Always call parseClaimsJws() with a verified signing key and enforce explicit algorithm allowlists.",
+      "Ensure symmetric HMAC secrets have at least 256 bits of entropy and are stored in a secrets manager.",
+      "For distributed token verification, use asymmetric key pairs (RS256/ES256).",
+      "Rotate signing secrets immediately if credentials have been exposed."
     ]
   },
   {
@@ -279,7 +386,13 @@
     "owasp_id": "A09:2025",
     "cwe_id": "CWE-117",
     "language": "java",
-    "tags": ["java", "slf4j", "logging", "crlf", "credentials"],
+    "tags": [
+      "java",
+      "slf4j",
+      "logging",
+      "crlf",
+      "credentials"
+    ],
     "content": "Logging unsanitized user inputs containing carriage returns (\\r) and line feeds (\\n) allows log forging, tricking SOC analysts or corrupting SIEM log parsers. Logging passwords or session IDs breaches compliance.",
     "vulnerable_example": "logger.info(\"Login attempt for user: \" + username + \" with password: \" + password);",
     "secure_example": "String cleanUsername = username.replaceAll(\"[\\r\\n]\", \"_\");\nlogger.warn(\"Authentication failed for user: {}\", cleanUsername);",
@@ -295,7 +408,13 @@
     "owasp_id": "A10:2025",
     "cwe_id": "CWE-755",
     "language": "java",
-    "tags": ["java", "exceptions", "code-smell", "interrupted-exception", "cert"],
+    "tags": [
+      "java",
+      "exceptions",
+      "code-smell",
+      "interrupted-exception",
+      "cert"
+    ],
     "content": "Empty catch blocks silently swallow exceptions, hiding system crashes and leaving the application in an indeterminate state. Suppressing InterruptedException prevents worker threads from shutting down cleanly.",
     "vulnerable_example": "try {\n    accountService.debit(amount);\n} catch (Exception e) {\n    // Silently swallowed!\n}",
     "secure_example": "try {\n    accountService.debit(amount);\n} catch (InsufficientFundsException e) {\n    logger.warn(\"Debit rejected: {}\", e.getMessage());\n    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());\n} catch (DatabaseException e) {\n    logger.error(\"Transaction failure\", e);\n    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, \"Try again later\");\n}",
@@ -311,13 +430,42 @@
     "owasp_id": "A10:2025",
     "cwe_id": "CWE-404",
     "language": "java",
-    "tags": ["java", "try-with-resources", "autocloseable", "resource-leak", "memory"],
+    "tags": [
+      "java",
+      "try-with-resources",
+      "autocloseable",
+      "resource-leak",
+      "memory"
+    ],
     "content": "Failing to close database connections, sockets, and file streams leads to file descriptor exhaustion and database connection pool starvation under production loads. Using Java 7+ try-with-resources guarantees automatic resource closure.",
     "vulnerable_example": "Connection conn = dataSource.getConnection();\nStatement stmt = conn.createStatement();\nResultSet rs = stmt.executeQuery(sql);\n// If an exception occurs, conn is never closed!",
     "secure_example": "try (Connection conn = dataSource.getConnection();\n     PreparedStatement ps = conn.prepareStatement(sql);\n     ResultSet rs = ps.executeQuery()) {\n    // Resources automatically closed even on error\n}",
     "remediation_guidelines": [
       "Implement AutoCloseable for all stateful resources.",
       "Always manage I/O and JDBC streams with try-with-resources blocks."
+    ]
+  },
+  {
+    "id": "JAVA-SEC-21",
+    "category": "Code Quality & Maintainability",
+    "title": "Declaring Specific Exception Types Instead of Generic throws Exception",
+    "cwe_id": "CWE-398",
+    "language": "java",
+    "tags": [
+      "java",
+      "exception-handling",
+      "throws-exception",
+      "checked-exceptions",
+      "maintainability",
+      "cwe-398"
+    ],
+    "content": "Declaring 'throws Exception' in Java method signatures violates exception abstraction, obscures failure modes from callers, forces callers to catch generic java.lang.Exception, and defeats Java checked exception system. Methods must declare specific checked exception types (such as NoSuchAlgorithmException, GeneralSecurityException, IOException, SQLException) based on the exact operations performed, or catch low-level checked exceptions internally and wrap them in descriptive, domain-specific exceptions.",
+    "vulnerable_example": "public byte[] encryptPayload(String data) throws Exception {\n    Cipher cipher = Cipher.getInstance(\"AES/GCM/NoPadding\");\n    cipher.init(Cipher.ENCRYPT_MODE, key);\n    return cipher.doFinal(data.getBytes());\n}",
+    "secure_example": "public byte[] encryptPayload(String data) throws GeneralSecurityException {\n    try {\n        Cipher cipher = Cipher.getInstance(\"AES/GCM/NoPadding\");\n        cipher.init(Cipher.ENCRYPT_MODE, key, spec);\n        return cipher.doFinal(data.getBytes());\n    } catch (GeneralSecurityException e) {\n        logger.error(\"Encryption failed\", e);\n        throw e;\n    }\n}",
+    "remediation_guidelines": [
+      "Replace 'throws Exception' with the specific checked exception types thrown by called APIs (e.g. GeneralSecurityException, IOException, SQLException).",
+      "Catch checked exceptions internally and wrap them into descriptive runtime or domain exceptions when appropriate.",
+      "Never declare generic 'throws Exception' or 'throws Throwable' on public service interfaces."
     ]
   }
 ]

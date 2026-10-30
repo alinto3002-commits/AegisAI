@@ -189,11 +189,24 @@ class MultiAgentOrchestrator:
         timings["security_agent"] = elapsed_parallel
         timings["parallel_execution"] = elapsed_parallel
 
+        # Telemetry & Knowledge base detail breakdown per agent
+        sec_detail = self.sec_agent.get_telemetry_detail(security_findings, elapsed_parallel)
+        code_detail = self.code_agent.get_telemetry_detail(quality_findings, elapsed_parallel)
+        execution_details = [sec_detail, code_detail]
+
         # Step 4: Remediation Agent (RAG-grounded fix suggestions)
-        all_findings = quality_findings + security_findings
+        # Deduplicate findings by (line_start, cwe_id, title) - prioritize security findings
+        seen_keys = set()
+        deduped_findings: List[Finding] = []
+        for f in (security_findings + quality_findings):
+            dedup_key = (f.line_start, f.cwe_id, f.title)
+            if dedup_key not in seen_keys:
+                seen_keys.add(dedup_key)
+                deduped_findings.append(f)
+
         t0 = time.perf_counter()
         remediated_findings = self.rem_agent.run(
-            findings=all_findings,
+            findings=deduped_findings,
             code=submission.code,
             language=validation.language,
         )
@@ -233,4 +246,6 @@ class MultiAgentOrchestrator:
             category_counts=category_counts,
             pr_summary=pr_summary,
             agent_execution_times=timings,
+            execution_details=execution_details,
         )
+

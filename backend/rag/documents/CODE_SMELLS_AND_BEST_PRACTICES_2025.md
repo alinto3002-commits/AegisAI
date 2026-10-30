@@ -225,6 +225,12 @@ public void createUser(CreateUserCommand command) { ... }
 - **Security Impact**: The application continues execution in an invalid, corrupted, or unauthenticated state ("fail open").
 - **Refactoring Solution**: Catch specific exception types, log diagnostic details, clean up state, and fail closed.
 
+### Smell 11: Missing Docstrings and Code Documentation (CWE-1078)
+- **Problem**: Public functions, classes, and APIs declared without docstrings or structured documentation (CWE-1078).
+- **Maintainability & Security Impact**: Undocumented parameters and side-effects obscure authorization constraints, boundary assumptions, and expected input types, leading callers into insecure integration mistakes.
+- **Refactoring Solution**: Document all functions according to PEP 257 (Python) with Args, Returns, and Raises sections, or Javadoc (Java) with @param, @return, and @throws annotations.
+
+
 ---
 
 ## 3. SOLID Principles in Modern Python and Java

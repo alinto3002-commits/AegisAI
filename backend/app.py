@@ -150,26 +150,65 @@ def export_report_pdf(report: ReviewReport):
 def get_code_samples():
     """Returns pre-loaded sample codes for quick demonstration."""
     samples = {}
-    py_dir = SAMPLES_DIR / "python"
-    java_dir = SAMPLES_DIR / "java"
-
-    if py_dir.exists():
-        for f in py_dir.glob("*.py"):
-            samples[f"python_{f.stem}"] = {
-                "name": f.name,
-                "language": "python",
-                "code": f.read_text(encoding="utf-8"),
-            }
-
-    if java_dir.exists():
-        for f in java_dir.glob("*.java"):
-            samples[f"java_{f.stem}"] = {
-                "name": f.name,
-                "language": "java",
-                "code": f.read_text(encoding="utf-8"),
-            }
-
+    eval_samples = PROJECT_ROOT / "evaluation" / "samples"
+    for d, lang in [
+        (eval_samples / "java", "java"),
+        (eval_samples / "python", "python"),
+        (SAMPLES_DIR / "java", "java"),
+        (SAMPLES_DIR / "python", "python"),
+    ]:
+        if d.exists():
+            ext = "*.java" if lang == "java" else "*.py"
+            for f in d.glob(ext):
+                key = f"{lang}_{f.stem}"
+                if key not in samples:
+                    samples[key] = {
+                        "name": f.name,
+                        "language": lang,
+                        "code": f.read_text(encoding="utf-8"),
+                    }
     return samples
+
+@app.get("/api/evaluation/report")
+def get_evaluation_report():
+    """Returns the benchmark detection accuracy report and summary."""
+    eval_dir = PROJECT_ROOT / "evaluation" / "results"
+    report_file = eval_dir / "report.md"
+    csv_file = eval_dir / "summary.csv"
+
+    if not report_file.exists():
+        try:
+            from evaluation.evaluate import run_evaluation
+            run_evaluation()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate evaluation: {e}")
+
+    report_md = report_file.read_text(encoding="utf-8") if report_file.exists() else ""
+    summary_csv = csv_file.read_text(encoding="utf-8") if csv_file.exists() else ""
+
+    return {
+        "report_markdown": report_md,
+        "summary_csv": summary_csv,
+    }
+
+@app.post("/api/evaluation/run")
+def trigger_evaluation():
+    """Triggers the benchmark evaluation pipeline across Java and Python samples."""
+    try:
+        from evaluation.evaluate import run_evaluation
+        run_evaluation()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {e}")
+
+    eval_dir = PROJECT_ROOT / "evaluation" / "results"
+    report_file = eval_dir / "report.md"
+    csv_file = eval_dir / "summary.csv"
+    return {
+        "status": "success",
+        "report_markdown": report_file.read_text(encoding="utf-8") if report_file.exists() else "",
+        "summary_csv": csv_file.read_text(encoding="utf-8") if csv_file.exists() else "",
+    }
+
 
 # Mount frontend directory for Web Developer Portal
 FRONTEND_DIR = PROJECT_ROOT / "frontend"

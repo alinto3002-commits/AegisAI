@@ -1,0 +1,11 @@
+mode,agent,language,issues,found,recall,findings,correct,precision,f1,severity_exact,severity_within_1,clean_file_alarms
+tools only,security,python,15,13,0.867,15,13,0.867,0.867,0.923,1.0,0
+tools only,security,java,14,13,0.929,13,13,1.0,0.963,1.0,1.0,0
+tools only,code_analysis,python,2,2,1.0,5,2,0.4,0.571,1.0,1.0,0
+tools only,code_analysis,java,2,2,1.0,6,2,0.333,0.5,1.0,1.0,0
+tools only,all,all,33,30,0.909,39,30,0.769,0.833,0.967,1.0,0
+full,security,python,15,13,0.867,15,13,0.867,0.867,0.923,1.0,0
+full,security,java,14,13,0.929,13,13,1.0,0.963,1.0,1.0,0
+full,code_analysis,python,2,2,1.0,5,2,0.4,0.571,1.0,1.0,0
+full,code_analysis,java,2,2,1.0,6,2,0.333,0.5,1.0,1.0,0
+full,all,all,33,30,0.909,39,30,0.769,0.833,0.967,1.0,0

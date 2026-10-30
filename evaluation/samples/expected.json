@@ -1,0 +1,315 @@
+{
+  "samples": {
+    "java/AuthService.java": {
+      "language": "java",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded JWT Secret String",
+          "severity": "HIGH",
+          "owasp": "A07:2025 - Authentication Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded Symmetric Key Bytes",
+          "severity": "HIGH",
+          "owasp": "A07:2025 - Authentication Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-328",
+          "title": "Weak Hash Algorithm (SHA-1)",
+          "severity": "HIGH",
+          "owasp": "A04:2025 - Cryptographic Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-338",
+          "title": "Weak PRNG (java.util.Random)",
+          "severity": "HIGH",
+          "owasp": "A04:2025 - Cryptographic Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-327",
+          "title": "Broken ECB Cipher Mode",
+          "severity": "HIGH",
+          "owasp": "A04:2025 - Cryptographic Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-347",
+          "title": "JWT Symmetric Secret Key Usage",
+          "severity": "MEDIUM",
+          "owasp": "A07:2025 - Authentication Failures"
+        },
+        {
+          "agent": "code_analysis",
+          "cwe_id": "CWE-398",
+          "title": "Generic throws Exception in signature",
+          "severity": "LOW",
+          "category": "Code Smell: Exception Handling"
+        }
+      ]
+    },
+    "java/AdminController.java": {
+      "language": "java",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded Admin API Key",
+          "severity": "CRITICAL",
+          "owasp": "A07:2025 - Authentication Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-862",
+          "title": "Missing Authorization on Administrative Function",
+          "severity": "HIGH",
+          "owasp": "A01:2025 - Broken Access Control"
+        }
+      ]
+    },
+    "java/CommandRunner.java": {
+      "language": "java",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-78",
+          "title": "OS Command Injection via Runtime.exec",
+          "severity": "HIGH",
+          "owasp": "A05:2025 - Injection"
+        }
+      ]
+    },
+    "java/FileController.java": {
+      "language": "java",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-22",
+          "title": "Path Traversal via Unsanitized File Instantiation",
+          "severity": "HIGH",
+          "owasp": "A01:2025 - Broken Access Control"
+        }
+      ]
+    },
+    "java/InventoryManager.java": {
+      "language": "java",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-89",
+          "title": "SQL Injection via Statement Concatenation",
+          "severity": "CRITICAL",
+          "owasp": "A05:2025 - Injection"
+        }
+      ]
+    },
+    "java/OrderProcessor.java": {
+      "language": "java",
+      "issues": [
+        {
+          "agent": "code_analysis",
+          "cwe_id": "CWE-1075",
+          "title": "Excessive Control Nesting Level",
+          "severity": "MEDIUM",
+          "category": "Code Smell: Deep Nesting"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-390",
+          "title": "Empty catch Block Silently Swallowing Exceptions",
+          "severity": "MEDIUM",
+          "owasp": "A10:2025 - Mishandling of Exceptional Conditions"
+        }
+      ]
+    },
+    "java/StringUtils.java": {
+      "language": "java",
+      "is_clean_baseline": true,
+      "issues": []
+    },
+    "java/UserRepository.java": {
+      "language": "java",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded Database Password",
+          "severity": "CRITICAL",
+          "owasp": "A07:2025 - Authentication Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-89",
+          "title": "SQL Injection in User Authentication Query",
+          "severity": "CRITICAL",
+          "owasp": "A05:2025 - Injection"
+        }
+      ]
+    },
+    "python/auth.py": {
+      "language": "python",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded JWT Secret String",
+          "severity": "HIGH",
+          "owasp": "A07:2025 - Authentication Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-328",
+          "title": "Weak Hash Algorithm (MD5)",
+          "severity": "HIGH",
+          "owasp": "A04:2025 - Cryptographic Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-338",
+          "title": "Weak PRNG (random module used for token)",
+          "severity": "HIGH",
+          "owasp": "A04:2025 - Cryptographic Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-1059",
+          "title": "Missing Rate Limiting on Login Endpoint",
+          "severity": "MEDIUM",
+          "owasp": "A06:2025 - Insecure Design"
+        }
+      ]
+    },
+    "python/clean_utils.py": {
+      "language": "python",
+      "is_clean_baseline": true,
+      "issues": []
+    },
+    "python/file_service.py": {
+      "language": "python",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-22",
+          "title": "Path Traversal in Read Document",
+          "severity": "HIGH",
+          "owasp": "A01:2025 - Broken Access Control"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-22",
+          "title": "Path Traversal in Write Document",
+          "severity": "HIGH",
+          "owasp": "A01:2025 - Broken Access Control"
+        }
+      ]
+    },
+    "python/order_processing.py": {
+      "language": "python",
+      "issues": [
+        {
+          "agent": "code_analysis",
+          "cwe_id": "CWE-1075",
+          "title": "Excessive Control Nesting Level",
+          "severity": "MEDIUM",
+          "category": "Code Smell: Deep Nesting"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-755",
+          "title": "Bare except Swallowing Exceptions",
+          "severity": "MEDIUM",
+          "owasp": "A10:2025 - Mishandling of Exceptional Conditions"
+        }
+      ]
+    },
+    "python/report_builder.py": {
+      "language": "python",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-502",
+          "title": "Insecure Deserialization via pickle.loads",
+          "severity": "CRITICAL",
+          "owasp": "A08:2025 - Software or Data Integrity Failures"
+        }
+      ]
+    },
+    "python/shell_tools.py": {
+      "language": "python",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-78",
+          "title": "OS Command Injection via os.system",
+          "severity": "CRITICAL",
+          "owasp": "A05:2025 - Injection"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-78",
+          "title": "Insecure Subprocess Execution with shell=True",
+          "severity": "HIGH",
+          "owasp": "A05:2025 - Injection"
+        }
+      ]
+    },
+    "python/user_db.py": {
+      "language": "python",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-798",
+          "title": "Hardcoded Database Password",
+          "severity": "CRITICAL",
+          "owasp": "A07:2025 - Authentication Failures"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-89",
+          "title": "SQL Injection via Formatted f-string",
+          "severity": "CRITICAL",
+          "owasp": "A05:2025 - Injection"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-532",
+          "title": "Sensitive Credential Logging in Plaintext",
+          "severity": "HIGH",
+          "owasp": "A09:2025 - Security Logging and Alerting Failures"
+        }
+      ]
+    },
+    "python/web_app.py": {
+      "language": "python",
+      "issues": [
+        {
+          "agent": "security",
+          "cwe_id": "CWE-16",
+          "title": "Debug Mode Enabled in Application Configuration",
+          "severity": "HIGH",
+          "owasp": "A02:2025 - Security Misconfiguration"
+        },
+        {
+          "agent": "security",
+          "cwe_id": "CWE-942",
+          "title": "Overly Permissive Wildcard CORS Configuration",
+          "severity": "MEDIUM",
+          "owasp": "A02:2025 - Security Misconfiguration"
+        },
+        {
+          "agent": "code_analysis",
+          "cwe_id": "CWE-710",
+          "title": "Wildcard Import Detected (from math import *)",
+          "severity": "LOW",
+          "category": "Code Smell: Namespace Pollution"
+        }
+      ]
+    }
+  }
+}

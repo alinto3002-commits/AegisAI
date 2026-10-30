@@ -54,6 +54,7 @@ class Finding(BaseModel):
     line_end: int
     cwe_id: Optional[str] = None
     owasp_category: Optional[str] = None
+    language: Optional[str] = None
     evidence: Optional[str] = None
     remediation: Optional[RemediationSuggestion] = None
 
@@ -64,6 +65,19 @@ class PRReviewSummary(BaseModel):
     risk_level: str  # Low, Moderate, High, Critical
     key_findings: List[str] = Field(default_factory=list)
     recommended_actions: List[str] = Field(default_factory=list)
+
+class AgentToolTelemetry(BaseModel):
+    tool: str
+    findings: int
+    time_seconds: float
+    status: str = "ok"
+
+class AgentExecutionDetail(BaseModel):
+    agent_name: str
+    model: str = "openai/gpt-oss-120b"
+    duration_seconds: float
+    tools: List[AgentToolTelemetry] = Field(default_factory=list)
+    knowledge_sections_used: List[str] = Field(default_factory=list)
 
 class ReviewReport(BaseModel):
     id: str
@@ -82,6 +96,7 @@ class ReviewReport(BaseModel):
     category_counts: Dict[str, int] = Field(default_factory=dict)
     pr_summary: PRReviewSummary
     agent_execution_times: Dict[str, float] = Field(default_factory=dict)
+    execution_details: List[AgentExecutionDetail] = Field(default_factory=list)
 
 class ChatQuery(BaseModel):
     query: str

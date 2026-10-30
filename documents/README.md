@@ -15,6 +15,7 @@ This directory contains the authoritative knowledge documents indexed into the *
 | [`SECURE_CODING_GUIDELINES_2025.md`](SECURE_CODING_GUIDELINES_2025.md) | Master defense-in-depth security principles: Zero Trust, input validation, cryptography, session management, and logging. | General |
 | [`SOURCE_REGISTER.md`](SOURCE_REGISTER.md) | Provenance tracking, canonical URLs, last verified dates, and CWE taxonomy mappings. | General |
 | [`RAG_ARCHITECTURE_GUIDE.md`](RAG_ARCHITECTURE_GUIDE.md) | System architecture guide for document chunking, ChromaDB vector indexing, and multi-agent retrieval. | Architecture |
+| [`SECURITY_VULNERABILITY_AGENT_WORKFLOW.md`](SECURITY_VULNERABILITY_AGENT_WORKFLOW.md) | Multi-tier tool ecosystem (Python, Java, Enterprise), 7-step orchestrated workflow, and parallel multi-agent execution pipeline. | Architecture / Security |
 
 ---
 

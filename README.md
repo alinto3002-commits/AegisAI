@@ -20,6 +20,19 @@ An automated, intelligent multi-agent platform for reviewing code quality, detec
    - Detects code smells, design anti-patterns, God classes, deep nesting, long methods, and unused imports.
 
 3. **Security Vulnerability Agent (`backend/agents/security_agent.py`)**:
+   - Leverages a combination of open-source and enterprise-grade tools across Python, Java, and enterprise environments:
+     - **Python**:
+       - `Bandit`: Security-focused linter that scans Python code for common security issues (hardcoded passwords, weak cryptography, unsafe function calls).
+       - `Semgrep`: Fast, lightweight static analysis tool supporting custom rules for bugs, security vulnerabilities, and anti-patterns.
+       - `Pylint`: Code analysis tool checking coding standards, errors, and potential security issues for clean Python codebases.
+     - **Java**:
+       - `SpotBugs`: Detects bugs and security vulnerabilities in Java bytecode (null pointer dereferences, insecure cryptography, resource leaks).
+       - `PMD`: Static code analyzer identifying common programming flaws, security issues, and code duplication in Java and JVM languages.
+       - `Checkstyle`: Enforces coding conventions and best practices in Java for consistent and secure code standards.
+     - **Enterprise**:
+       - `SonarQube`: Comprehensive platform for continuous inspection of code quality and security across multiple languages with detailed vulnerability reports.
+       - `Snyk`: Developer-first security tool finding vulnerabilities in open-source dependencies, containers, and infrastructure as code.
+       - `OWASP Dependency Check`: Identifies known vulnerabilities (CVEs) in project dependencies by comparing them against the National Vulnerability Database (NVD).
    - Scans against the official **OWASP Top 10 (2025 Edition)** & CWE standards:
      - **A01: Broken Access Control** (`CWE-22`, `CWE-862`): Path traversal, missing authorization.
      - **A02: Security Misconfiguration** (`CWE-16`, `CWE-942`): Debug mode enabled, wildcard CORS `*`.
@@ -31,6 +44,62 @@ An automated, intelligent multi-agent platform for reviewing code quality, detec
      - **A08: Software or Data Integrity Failures** (`CWE-502`): Unsafe deserialization (`pickle`, Java `ObjectInputStream`).
      - **A09: Security Logging and Alerting Failures** (`CWE-532`): Plaintext credential leakage in application logs.
      - **A10: Mishandling of Exceptional Conditions** (`CWE-755`, `CWE-390`): Bare `except: pass`, empty catch blocks.
+
+### Security Vulnerability Agent Workflow
+
+The platform executes a dedicated 7-step analysis pipeline where the **Code Analysis Agent** and **Security Vulnerability Agent** execute concurrently in parallel (Milestone 2.3):
+
+```mermaid
+flowchart TD
+    %% Workflow Steps 1 to 7
+    D["1. Developer<br/><i>writes and submits source code</i>"] --> U["2. Upload Source Code<br/><i>code is uploaded to the analysis platform</i>"]
+
+    U --> P["Parallel Execution Pool<br/>(concurrent.futures.ThreadPoolExecutor)"]
+
+    subgraph ParallelAgents ["Parallel Analysis Stage (Milestone 2.3)"]
+        direction LR
+        CAA["3. Code Analysis Agent<br/><i>performs general code quality,<br/>style, and logic analysis</i>"]
+        SVA["4. Security Vulnerability Agent<br/><i>runs dedicated security<br/>scanning in parallel</i>"]
+    end
+
+    P --> CAA
+    P --> SVA
+
+    SVA --> O["5. OWASP Detection<br/><i>matches code patterns against<br/>OWASP vulnerability rules</i>"]
+
+    CAA --> S["6. Severity Scoring<br/><i>assigns risk levels to all findings</i>"]
+    O --> S
+
+    S --> R["7. Unified Findings Report<br/><i>combines code quality and security findings<br/>into a single comprehensive report for the developer</i>"]
+
+    %% Visual Styling
+    classDef step fill:#18181b,stroke:#52525b,stroke-width:1.5px,color:#ffffff;
+    classDef parallel fill:#27272a,stroke:#a1a1aa,stroke-width:2px,color:#ffffff;
+    classDef output fill:#09090b,stroke:#ffffff,stroke-width:2px,color:#ffffff;
+
+    class D,U,O,S step;
+    class CAA,SVA parallel;
+    class R output;
+```
+
+#### Workflow Steps:
+1. **Developer**: Writes and submits source code.
+2. **Upload Source Code**: Code is uploaded to the analysis platform and validated.
+3. **Code Analysis Agent**: Performs general code quality, style, and logic analysis.
+4. **Security Vulnerability Agent**: Runs dedicated security scanning in parallel.
+5. **OWASP Detection**: Matches code patterns against OWASP vulnerability rules.
+6. **Severity Scoring**: Assigns risk levels to all findings.
+7. **Unified Findings Report**: Combines code quality and security findings into a single comprehensive report for the developer.
+
+---
+
+### Code Analysis Agent
+Performs automated structural and design quality inspection on submitted Python and Java code. Runs concurrently with the Security Vulnerability Agent to analyze cyclomatic complexity, God classes, deep conditional nesting (>3 levels), long methods, duplicate logic, and code smells without blocking the pipeline.
+
+### Security Vulnerability Agent
+Runs dedicated static security scanning concurrently with code analysis. Evaluates the codebase against the 10 categories of OWASP Top 10 (2025 Edition), correlates findings with CWE standards, interfaces with multi-tier toolchains (Bandit, Semgrep, Pylint, SpotBugs, PMD, Checkstyle, SonarQube, Snyk, OWASP Dependency Check), and streams flagged issues directly into RAG-grounded remediation and pull-request summary generation.
+
+---
 
 4. **Remediation Agent (`backend/agents/remediation_agent.py`)**:
    - Queries the Secure Coding Knowledge Base (RAG) to generate corrected replacement code, unified diffs, and remediation roadmaps.

@@ -6,6 +6,18 @@
 let currentLanguage = 'python';
 let currentReport = null;
 let currentFilter = 'ALL';
+let currentUploadedFilename = '';
+
+function getEffectiveFilename() {
+  const fileEl = document.getElementById('editor-filename');
+  if (fileEl && fileEl.textContent && fileEl.textContent.trim()) {
+    return fileEl.textContent.trim();
+  }
+  if (currentUploadedFilename) {
+    return currentUploadedFilename;
+  }
+  return currentLanguage === 'java' ? 'Solution.java' : 'main.py';
+}
 
 // Initialize application on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -103,17 +115,18 @@ function detectLanguageFromCode(code, filename) {
 }
 
 function updateEditorStats() {
-  const code = document.getElementById('code-input').value;
+  const editor = document.getElementById('code-input');
+  const code = editor ? editor.value : '';
   const lines = code ? code.split('\n').length : 0;
   const fileEl = document.getElementById('editor-filename');
-  let currentFile = fileEl ? fileEl.textContent.trim() : 'main.py';
+  let currentFile = fileEl ? fileEl.textContent.trim() : (currentUploadedFilename || 'main.py');
 
   // Automatically identify language directly from source code
   const detected = detectLanguageFromCode(code, currentFile);
   currentLanguage = detected;
 
   // Auto-update filename default if user hasn't uploaded a custom named file
-  if (currentFile === 'main.py' || currentFile === 'Main.java' || currentFile === '') {
+  if (fileEl && (currentFile === 'main.py' || currentFile === 'Main.java' || currentFile === '')) {
     if (detected === 'java') {
       fileEl.textContent = 'Main.java';
     } else {
@@ -143,19 +156,28 @@ function updateEditorStats() {
 
 // Switch between Review, KB, and Chat tabs
 function switchMainTab(tab) {
-  document.querySelectorAll('.view-tab').forEach(el => el.classList.remove('active', 'hidden'));
+  document.querySelectorAll('.view-tab').forEach(el => {
+    el.classList.remove('active');
+    el.classList.add('hidden');
+  });
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
 
   if (tab === 'review') {
-    document.getElementById('tab-review').classList.add('active');
-    document.getElementById('nav-btn-review').classList.add('active');
+    const el = document.getElementById('tab-review');
+    if (el) { el.classList.add('active'); el.classList.remove('hidden'); }
+    const btn = document.getElementById('nav-btn-review');
+    if (btn) btn.classList.add('active');
   } else if (tab === 'kb') {
-    document.getElementById('tab-kb').classList.add('active');
-    document.getElementById('nav-btn-kb').classList.add('active');
+    const el = document.getElementById('tab-kb');
+    if (el) { el.classList.add('active'); el.classList.remove('hidden'); }
+    const btn = document.getElementById('nav-btn-kb');
+    if (btn) btn.classList.add('active');
     searchKnowledgeBase();
   } else if (tab === 'chat') {
-    document.getElementById('tab-chat').classList.add('active');
-    document.getElementById('nav-btn-assistant').classList.add('active');
+    const el = document.getElementById('tab-chat');
+    if (el) { el.classList.add('active'); el.classList.remove('hidden'); }
+    const btn = document.getElementById('nav-btn-assistant');
+    if (btn) btn.classList.add('active');
   }
 }
 
@@ -167,7 +189,9 @@ function handleFileUpload(event) {
   const reader = new FileReader();
   reader.onload = (e) => {
     document.getElementById('code-input').value = e.target.result;
-    document.getElementById('editor-filename').textContent = file.name;
+    currentUploadedFilename = file.name;
+    const fileEl = document.getElementById('editor-filename');
+    if (fileEl) fileEl.textContent = file.name;
     updateEditorStats();
   };
   reader.readAsText(file);
@@ -187,7 +211,7 @@ async function triggerSyntaxCheck() {
       body: JSON.stringify({
         code: code,
         language: currentLanguage,
-        filename: document.getElementById('editor-filename').textContent,
+        filename: getEffectiveFilename(),
       }),
     });
 
@@ -251,7 +275,7 @@ async function triggerMultiAgentReview() {
       body: JSON.stringify({
         code: code,
         language: currentLanguage,
-        filename: document.getElementById('editor-filename').textContent,
+        filename: getEffectiveFilename(),
       }),
     });
 
@@ -296,21 +320,51 @@ function setStepState(stepId, state) {
   el.className = `agent-step ${state}`;
 }
 
+// Quick Load Evaluation Sample File
+async function loadSampleFile(sampleKey) {
+  try {
+    const res = await fetch('/api/samples');
+    if (!res.ok) throw new Error('Failed to load samples');
+    const samples = await res.json();
+    const sample = samples[sampleKey];
+    if (!sample) {
+      alert('Sample not found: ' + sampleKey);
+      return;
+    }
+    const editor = document.getElementById('code-input');
+    editor.value = sample.code;
+    currentUploadedFilename = sample.name;
+    const fileEl = document.getElementById('editor-filename');
+    if (fileEl) fileEl.textContent = sample.name;
+    currentLanguage = sample.language;
+
+    const picker = document.getElementById('sample-picker');
+    if (picker) picker.value = sampleKey;
+
+    updateEditorStats();
+    triggerSyntaxCheck();
+  } catch (err) {
+    console.error('Error loading sample:', err);
+  }
+}
+
 // Module 4: Render Findings and Scores
 function renderReviewReport(report) {
   document.getElementById('findings-dashboard').classList.remove('hidden');
 
   // Health Score & Gauge
   const scoreNum = document.getElementById('health-score-num');
-  scoreNum.textContent = report.health_score;
+  if (scoreNum) scoreNum.textContent = report.health_score;
+
+  let scoreColor = '#166534';
+  if (report.health_score < 50) scoreColor = '#8b1e2b';
+  else if (report.health_score < 75) scoreColor = '#b45309';
+  else if (report.health_score < 90) scoreColor = '#a16207';
 
   const circle = document.getElementById('health-score-circle');
-  let scoreColor = '#10b981';
-  if (report.health_score < 50) scoreColor = '#f43f5e';
-  else if (report.health_score < 75) scoreColor = '#f97316';
-  else if (report.health_score < 90) scoreColor = '#eab308';
-
-  circle.style.background = `conic-gradient(${scoreColor} ${report.health_score}%, rgba(255, 255, 255, 0.05) 0%)`;
+  if (circle) {
+    circle.style.background = `conic-gradient(${scoreColor} ${report.health_score}%, #e5e0d6 0%)`;
+  }
 
   // Verdict Badge
   const verdictEl = document.getElementById('verdict-badge');
@@ -328,12 +382,92 @@ function renderReviewReport(report) {
   document.getElementById('count-info').textContent = sevs.INFO || 0;
   document.getElementById('count-all').textContent = report.findings.length;
 
+  const secCount = report.findings.filter(f => f.agent_type.includes('Security')).length;
+  const qualCount = report.findings.filter(f => f.agent_type.includes('Code Analysis')).length;
+  const countSecEl = document.getElementById('count-sec');
+  const countQualEl = document.getElementById('count-qual');
+  if (countSecEl) countSecEl.textContent = secCount;
+  if (countQualEl) countQualEl.textContent = qualCount;
+
+  // Parallel runtime pill
+  const parallelTime = report.agent_execution_times ? report.agent_execution_times.parallel_execution || 0.8 : 0.8;
+  const runtimePill = document.getElementById('parallel-runtime-pill');
+  const runtimeText = document.getElementById('parallel-runtime-text');
+  if (runtimePill && runtimeText) {
+    runtimePill.classList.remove('hidden');
+    runtimeText.textContent = `Security Agent and Code Analysis Agent ran in parallel · ${parallelTime} s`;
+  }
+
+  // Render Telemetry Details Tab
+  renderDetailsTab(report);
+
   // PR Summary View
   const prMarkdown = document.getElementById('pr-summary-markdown');
   prMarkdown.innerHTML = renderMarkdown(report.pr_summary.summary_markdown);
 
   // Render cards
   filterFindings('ALL');
+}
+
+function renderDetailsTab(report) {
+  const container = document.getElementById('details-content');
+  if (!container) return;
+
+  if (!report.execution_details || report.execution_details.length === 0) {
+    container.innerHTML = `<div class="findings-placeholder"><p>No agent telemetry available.</p></div>`;
+    return;
+  }
+
+  let html = '';
+  report.execution_details.forEach(agent => {
+    let toolsHtml = '';
+    agent.tools.forEach(tool => {
+      toolsHtml += `
+        <tr>
+          <td>${escapeHtml(tool.tool)}</td>
+          <td>${tool.findings}</td>
+          <td>${tool.time_seconds}</td>
+          <td><span class="status-ok">${escapeHtml(tool.status)}</span></td>
+        </tr>
+      `;
+    });
+
+    let citationsHtml = '';
+    agent.knowledge_sections_used.forEach(citation => {
+      citationsHtml += `<div class="knowledge-section-item">📌 ${escapeHtml(citation)}</div>`;
+    });
+
+    html += `
+      <div class="telemetry-agent-card">
+        <div class="telemetry-header">
+          <span>${escapeHtml(agent.agent_name)}</span>
+          <span style="color: #71717a;">·</span>
+          <span>${agent.duration_seconds} s</span>
+          <span style="color: #71717a;">·</span>
+          <span class="model-badge">model ${escapeHtml(agent.model)}</span>
+        </div>
+        <table class="telemetry-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Findings</th>
+              <th>Time (s)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${toolsHtml}
+          </tbody>
+        </table>
+        <div class="knowledge-section-box">
+          <div class="knowledge-section-title">Knowledge base sections used:</div>
+          ${citationsHtml}
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
 }
 
 // Filter findings list
@@ -373,12 +507,12 @@ function filterFindings(filter) {
       const escapedEvidence = escapeHtml(f.evidence || '');
       const testCode = f.remediation.unit_test_code ? escapeHtml(f.remediation.unit_test_code) : '';
       const testSectionHtml = testCode ? `
-        <div id="test-box-${f.id}" class="test-preview-box hidden" style="margin-top: 0.6rem; background: #070b12; border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 0.6rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-            <span style="font-size: 0.72rem; color: #818cf8; font-weight: 700;">🧪 Automated Regression Test (${currentLanguage === 'python' ? 'pytest' : 'JUnit 5'})</span>
+        <div id="test-box-${f.id}" class="test-preview-box hidden" style="margin-top: 0.65rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.75rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
+            <span style="font-size: 0.76rem; color: #1e3a5f; font-weight: 700; font-family: var(--font-heading); letter-spacing: 0.04em;">🧪 Automated Regression Test (${currentLanguage === 'python' ? 'pytest' : 'JUnit 5'})</span>
             <button class="copy-btn" onclick="copySnippet(this, \`${testCode.replace(/`/g, '\\`')}\`)">Copy Test</button>
           </div>
-          <pre class="remediation-code" style="color: #c7d2fe;"><code>${testCode}</code></pre>
+          <pre class="remediation-code" style="color: #0f172a; background: #ffffff; border: 1px solid #e2e8f0;"><code>${testCode}</code></pre>
         </div>
       ` : '';
 
@@ -389,13 +523,13 @@ function filterFindings(filter) {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
               Remediation Guidance (RAG Grounded)
             </span>
-            <div style="display: flex; gap: 0.4rem;">
+            <div style="display: flex; gap: 0.45rem;">
               <button class="copy-btn" onclick="copySnippet(this, \`${escapedRemCode.replace(/`/g, '\\`')}\`)">Copy Fix</button>
-              <button class="copy-btn" style="color: #38bdf8;" onclick="toggleTestBox('${f.id}')">🧪 Unit Test</button>
-              <button class="copy-btn" style="color: #a78bfa;" onclick="discussFindingWithAssistant('${f.id}')">💬 Ask AI</button>
+              <button class="copy-btn btn-action-test" onclick="toggleTestBox('${f.id}')">🧪 Unit Test</button>
+              <button class="copy-btn btn-action-discuss" onclick="discussFindingWithAssistant('${f.id}')">💬 Consult Auditor</button>
             </div>
           </div>
-          <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 0.5rem;">${escapeHtml(f.remediation.explanation)}</div>
+          <div style="font-size: 0.86rem; color: #475569; margin-bottom: 0.55rem; line-height: 1.5;">${escapeHtml(f.remediation.explanation)}</div>
           <pre class="remediation-code"><code>${escapedRemCode}</code></pre>
           ${testSectionHtml}
         </div>
@@ -442,16 +576,64 @@ function discussFindingWithAssistant(findingId) {
   sendChatMessage();
 }
 
-function switchFindingsTab(tab) {
+async function switchFindingsTab(tab) {
   const prView = document.getElementById('pr-summary-view');
   const findingsList = document.getElementById('findings-list');
+  const detailsView = document.getElementById('details-view');
+  const reportView = document.getElementById('benchmark-report-view');
+
+  // Deactivate filter tab buttons
+  document.querySelectorAll('.findings-filter-bar .filter-btn').forEach(btn => btn.classList.remove('active'));
+
+  // Hide all view containers
+  if (findingsList) findingsList.classList.add('hidden');
+  if (prView) prView.classList.add('hidden');
+  if (detailsView) detailsView.classList.add('hidden');
+  if (reportView) reportView.classList.add('hidden');
 
   if (tab === 'pr') {
-    prView.classList.remove('hidden');
-    findingsList.classList.add('hidden');
+    if (prView) prView.classList.remove('hidden');
+    const b = document.getElementById('tab-btn-pr');
+    if (b) b.classList.add('active');
+  } else if (tab === 'details') {
+    if (detailsView) detailsView.classList.remove('hidden');
+    const b = document.getElementById('tab-btn-details');
+    if (b) b.classList.add('active');
+  } else if (tab === 'report') {
+    if (reportView) reportView.classList.remove('hidden');
+    const b = document.getElementById('tab-btn-report');
+    if (b) b.classList.add('active');
+    await loadBenchmarkReport();
   } else {
-    prView.classList.add('hidden');
-    findingsList.classList.remove('hidden');
+    if (findingsList) findingsList.classList.remove('hidden');
+  }
+}
+
+async function loadBenchmarkReport() {
+  const container = document.getElementById('benchmark-report-markdown');
+  if (!container) return;
+  container.innerHTML = '<div style="padding: 1rem; color: #1e3a5f; font-family: var(--font-heading);">Loading benchmark evaluation report...</div>';
+  try {
+    const res = await fetch('/api/evaluation/report');
+    if (!res.ok) throw new Error('Failed to fetch benchmark report');
+    const data = await res.json();
+    container.innerHTML = renderMarkdown(data.report_markdown);
+  } catch (err) {
+    container.innerHTML = `<p style="color: #991b1b; padding: 1rem;">Failed to load evaluation benchmark report: ${err.message}</p>`;
+  }
+}
+
+async function refreshBenchmarkReport() {
+  const container = document.getElementById('benchmark-report-markdown');
+  if (!container) return;
+  container.innerHTML = `<div style="padding: 1rem; color: #1e3a5f; font-family: var(--font-heading);">Running automated benchmark evaluation suite across Java & Python samples...</div>`;
+  try {
+    const res = await fetch('/api/evaluation/run', { method: 'POST' });
+    if (!res.ok) throw new Error('Benchmark run failed');
+    const data = await res.json();
+    container.innerHTML = renderMarkdown(data.report_markdown);
+  } catch (err) {
+    container.innerHTML = `<p style="color: #991b1b; padding: 1rem;">Benchmark failed: ${err.message}</p>`;
   }
 }
 
@@ -495,14 +677,14 @@ async function exportReport(format) {
 async function searchKnowledgeBase() {
   const query = document.getElementById('kb-search-input').value.trim() || 'OWASP 2025';
   const grid = document.getElementById('kb-results-grid');
-  grid.innerHTML = '<div style="color: #94a3b8;">Searching knowledge base...</div>';
+  grid.innerHTML = '<div style="color: #c5a059; font-style: italic; padding: 1rem;">Searching security archive...</div>';
 
   try {
-    const res = await fetch(`/api/kb/search?q=${encodeURIComponent(query)}&limit=12`);
+    const res = await fetch(`/api/kb/search?q=${encodeURIComponent(query)}&limit=9`);
     const results = await res.json();
 
     if (!results || results.length === 0) {
-      grid.innerHTML = '<div style="color: #94a3b8;">No matching guidelines found.</div>';
+      grid.innerHTML = '<div style="color: #cdbeaa; font-style: italic; padding: 1rem;">No matching canon references found.</div>';
       return;
     }
 
@@ -510,6 +692,17 @@ async function searchKnowledgeBase() {
     results.forEach(doc => {
       const card = document.createElement('div');
       card.className = 'kb-card';
+
+      // Clean snippet without raw markdown dumps
+      let cleanSnippet = (doc.content || '')
+        .replace(/- \*\*.*?\*\*:/g, '')
+        .replace(/\[.*?\]\(.*?\)/g, '')
+        .replace(/[*#`_]/g, '')
+        .trim();
+      if (cleanSnippet.length > 180) {
+        cleanSnippet = cleanSnippet.substring(0, 180) + '...';
+      }
+
       card.innerHTML = `
         <div class="kb-card-header">
           <div>
@@ -520,14 +713,13 @@ async function searchKnowledgeBase() {
               <span class="meta-chip">${escapeHtml(doc.category)}</span>
             </div>
           </div>
-          <span style="font-size: 0.72rem; color: #38bdf8; font-weight: 700;">Score: ${doc.relevance_score}</span>
         </div>
-        <p class="kb-card-body">${escapeHtml(doc.content)}</p>
+        <p class="kb-card-body" style="font-style: italic; color: #475569; line-height: 1.55; margin-top: 0.65rem;">${escapeHtml(cleanSnippet)}</p>
       `;
       grid.appendChild(card);
     });
   } catch (err) {
-    grid.innerHTML = `<div style="color: #f43f5e;">Search error: ${err.message}</div>`;
+    grid.innerHTML = `<div style="color: #fca5a5;">Archive query error: ${err.message}</div>`;
   }
 }
 
@@ -536,10 +728,12 @@ async function loadKnowledgeBaseStats() {
     const res = await fetch('/api/kb/stats');
     if (res.ok) {
       const data = await res.json();
-      const catCount = Object.keys(data.categories || {}).length;
-      document.getElementById('kb-stats-bar').innerHTML = `
-        <strong>Knowledge Base Status:</strong> Indexed <strong>${data.total_documents}</strong> guidelines across <strong>${catCount}</strong> categories including full <strong>OWASP Top 10 (2025)</strong> suite.
-      `;
+      const statsBar = document.getElementById('kb-stats-bar');
+      if (statsBar) {
+        statsBar.innerHTML = `
+          <span>⚜ Codified Archive: <strong>${data.total_documents}</strong> standard references indexed across the complete <strong>OWASP Top 10 (2025)</strong> suite.</span>
+        `;
+      }
     }
   } catch (e) {
     console.warn(e);
@@ -591,7 +785,7 @@ function appendChatMessage(role, text, sources, followups) {
   let sourceHtml = '';
   if (sources && sources.length > 0) {
     sourceHtml = `
-      <div style="margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.5rem; font-size: 0.72rem; color: #94a3b8;">
+      <div style="margin-top: 0.75rem; border-top: 1px solid #e2ddd3; padding-top: 0.5rem; font-size: 0.78rem; color: #475569;">
         <strong>📚 Grounded Standards Cited:</strong> ${sources.map(s => escapeHtml(s.title)).join(' • ')}
       </div>
     `;
@@ -607,9 +801,9 @@ function appendChatMessage(role, text, sources, followups) {
   }
 
   msg.innerHTML = `
-    <div class="msg-avatar">${role === 'user' ? '👤' : '🤖'}</div>
+    <div class="msg-avatar">${role === 'user' ? '👤' : '⚖️'}</div>
     <div class="msg-body">
-      <div class="msg-header">${role === 'user' ? 'You' : 'AegisAI Code Assistant'}</div>
+      <div class="msg-header">${role === 'user' ? 'You' : 'Aegis Auditor'}</div>
       <div class="msg-text">${renderMarkdown(text)}</div>
       ${sourceHtml}
       ${followupsHtml}
@@ -626,15 +820,15 @@ function renderMarkdown(md) {
   let html = escapeHtml(md);
 
   // Headers
-  html = html.replace(/^### (.*$)/gim, '<h3 style="font-size: 0.95rem; margin: 0.5rem 0; color: #f1f5f9;">$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2 style="font-size: 1.1rem; margin: 0.6rem 0; color: #f1f5f9;">$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1 style="font-size: 1.25rem; margin: 0.75rem 0; color: #38bdf8;">$1</h1>');
+  html = html.replace(/^### (.*$)/gim, '<h3 style="font-size: 1.05rem; margin: 0.85rem 0 0.4rem 0; color: #1e3a5f; font-family: var(--font-heading); font-weight: 700;">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2 style="font-size: 1.2rem; margin: 1.1rem 0 0.5rem 0; color: #1e3a5f; font-family: var(--font-heading); font-weight: 700; border-bottom: 1px solid #e2ddd3; padding-bottom: 0.35rem;">$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1 style="font-size: 1.35rem; margin: 1.25rem 0 0.6rem 0; color: #1e3a5f; font-family: var(--font-heading); font-weight: 800; border-bottom: 2px solid #1e3a5f; padding-bottom: 0.45rem;">$1</h1>');
 
   // Code blocks ```code```
-  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  html = html.replace(/```([\s\S]*?)```/g, '<pre class="markdown-code-block"><code>$1</code></pre>');
 
   // Inline code `code`
-  html = html.replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 0.15rem 0.35rem; border-radius: 4px; font-family: monospace;">$1</code>');
+  html = html.replace(/`([^`]+)`/g, '<code class="markdown-inline-code">$1</code>');
 
   // Bold **text**
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -642,7 +836,22 @@ function renderMarkdown(md) {
   // Bullet items
   html = html.replace(/^- (.*$)/gim, '<li style="margin-left: 1rem;">$1</li>');
 
-  // Linebreaks
+  // Tables
+  html = html.replace(/((?:\|[^\n]+\|\r?\n?)+)/g, (match) => {
+    const rawLines = match.trim().split(/\r?\n/);
+    if (rawLines.length < 2) return match;
+    let table = '<table class="telemetry-table" style="margin: 0.75rem 0;">';
+    rawLines.forEach((line, i) => {
+      if (line.includes('---')) return;
+      const cells = line.split('|').map(c => c.trim()).filter((c, idx, arr) => idx > 0 && idx < arr.length - 1);
+      const tag = i === 0 ? 'th' : 'td';
+      table += '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>';
+    });
+    table += '</table>';
+    return table;
+  });
+
+  // Linebreaks (preserve table HTML)
   html = html.replace(/\n/g, '<br>');
 
   return html;
