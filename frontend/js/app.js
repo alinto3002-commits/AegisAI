@@ -152,6 +152,23 @@ function updateEditorStats() {
   if (statsEl) {
     statsEl.textContent = `${lines} lines | Auto-Identified (${langDisplay})`;
   }
+
+  const lineCountEl = document.getElementById('editor-line-count');
+  const charCountEl = document.getElementById('editor-char-count');
+  if (lineCountEl) lineCountEl.textContent = `${lines} line${lines === 1 ? '' : 's'}`;
+  if (charCountEl) charCountEl.textContent = `${code.length} chars`;
+}
+
+function clearEditor() {
+  const editor = document.getElementById('code-input');
+  if (editor) {
+    editor.value = '';
+    currentUploadedFilename = null;
+    const fileEl = document.getElementById('editor-filename');
+    if (fileEl) fileEl.textContent = 'main.py';
+    updateEditorStats();
+    showToast('Editor cleared', 'info');
+  }
 }
 
 // Switch between Review, KB, and Chat tabs
@@ -328,7 +345,7 @@ async function loadSampleFile(sampleKey) {
     const samples = await res.json();
     const sample = samples[sampleKey];
     if (!sample) {
-      alert('Sample not found: ' + sampleKey);
+      showToast('Sample not found: ' + sampleKey, 'error');
       return;
     }
     const editor = document.getElementById('code-input');
@@ -342,9 +359,11 @@ async function loadSampleFile(sampleKey) {
     if (picker) picker.value = sampleKey;
 
     updateEditorStats();
+    showToast(`Loaded ${sample.name} (${sample.language})`, 'info');
     triggerSyntaxCheck();
   } catch (err) {
     console.error('Error loading sample:', err);
+    showToast('Failed to load sample: ' + err.message, 'error');
   }
 }
 
@@ -401,9 +420,8 @@ function renderReviewReport(report) {
   // Render Telemetry Details Tab
   renderDetailsTab(report);
 
-  // PR Summary View
-  const prMarkdown = document.getElementById('pr-summary-markdown');
-  prMarkdown.innerHTML = renderMarkdown(report.pr_summary.summary_markdown);
+  // PR Summary View (Milestone 3 Full Executive Portal)
+  renderPRSummaryView(report);
 
   // Render cards
   filterFindings('ALL');
@@ -503,16 +521,33 @@ function filterFindings(filter) {
 
     let remHtml = '';
     if (f.remediation) {
-      const escapedRemCode = escapeHtml(f.remediation.corrected_snippet);
+      const escapedRemCode = escapeHtml(f.remediation.corrected_snippet || '');
       const escapedEvidence = escapeHtml(f.evidence || '');
+      const rawDiff = f.remediation.diff || '';
       const testCode = f.remediation.unit_test_code ? escapeHtml(f.remediation.unit_test_code) : '';
+      
       const testSectionHtml = testCode ? `
         <div id="test-box-${f.id}" class="test-preview-box hidden" style="margin-top: 0.65rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.75rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
             <span style="font-size: 0.76rem; color: #1e3a5f; font-weight: 700; font-family: var(--font-heading); letter-spacing: 0.04em;">🧪 Automated Regression Test (${currentLanguage === 'python' ? 'pytest' : 'JUnit 5'})</span>
             <button class="copy-btn" onclick="copySnippet(this, \`${testCode.replace(/`/g, '\\`')}\`)">Copy Test</button>
           </div>
-          <pre class="remediation-code" style="color: #0f172a; background: #ffffff; border: 1px solid #e2e8f0;"><code>${testCode}</code></pre>
+          <pre class="remediation-code" style="color: #0f172a; background: #ffffff; border: 1px solid #e2e8f0; max-height: 220px; overflow-y: auto;"><code>${testCode}</code></pre>
+        </div>
+      ` : '';
+
+      const diffSectionHtml = rawDiff ? `
+        <div id="diff-box-${f.id}" class="diff-preview-box hidden">
+          <div class="diff-box-header">
+            <span class="diff-box-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+              Unified Diff (Before vs After Patch)
+            </span>
+            <button class="copy-btn" onclick="copySnippet(this, \`${escapeHtml(rawDiff).replace(/`/g, '\\`')}\`)">Copy Patch</button>
+          </div>
+          <div class="unified-diff-container">
+            ${renderDiffLinesHtml(rawDiff)}
+          </div>
         </div>
       ` : '';
 
@@ -523,14 +558,17 @@ function filterFindings(filter) {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
               Remediation Guidance (RAG Grounded)
             </span>
-            <div style="display: flex; gap: 0.45rem;">
+            <div style="display: flex; gap: 0.45rem; flex-wrap: wrap;">
+              <button id="apply-btn-${f.id}" class="copy-btn btn-action-apply" onclick="applyFixToEditor('${f.id}')" title="Apply corrected code directly into the editor">⚡ Apply Fix</button>
+              ${rawDiff ? `<button class="copy-btn btn-action-diff" onclick="toggleDiffBox('${f.id}')" title="Toggle unified before/after diff">⚖️ View Diff</button>` : ''}
               <button class="copy-btn" onclick="copySnippet(this, \`${escapedRemCode.replace(/`/g, '\\`')}\`)">Copy Fix</button>
-              <button class="copy-btn btn-action-test" onclick="toggleTestBox('${f.id}')">🧪 Unit Test</button>
+              ${testCode ? `<button class="copy-btn btn-action-test" onclick="toggleTestBox('${f.id}')">🧪 Unit Test</button>` : ''}
               <button class="copy-btn btn-action-discuss" onclick="discussFindingWithAssistant('${f.id}')">💬 Consult Auditor</button>
             </div>
           </div>
           <div style="font-size: 0.86rem; color: #475569; margin-bottom: 0.55rem; line-height: 1.5;">${escapeHtml(f.remediation.explanation)}</div>
           <pre class="remediation-code"><code>${escapedRemCode}</code></pre>
+          ${diffSectionHtml}
           ${testSectionHtml}
         </div>
       `;
@@ -563,6 +601,227 @@ function toggleTestBox(findingId) {
   if (box) {
     box.classList.toggle('hidden');
   }
+}
+
+function toggleDiffBox(findingId) {
+  const box = document.getElementById(`diff-box-${findingId}`);
+  if (box) {
+    box.classList.toggle('hidden');
+  }
+}
+
+function renderDiffLinesHtml(diffText) {
+  if (!diffText) return '<div class="diff-empty">No diff generated for this finding.</div>';
+  const lines = diffText.split('\n');
+  return lines.map(line => {
+    let cls = 'diff-line-ctx';
+    let sign = ' ';
+    let content = line;
+    if (line.startsWith('---') || line.startsWith('+++')) {
+      cls = 'diff-line-file';
+      sign = line.substring(0, 3);
+      content = line.substring(3);
+    } else if (line.startsWith('@@')) {
+      cls = 'diff-line-chunk';
+      sign = '@';
+      content = line;
+    } else if (line.startsWith('+')) {
+      cls = 'diff-line-add';
+      sign = '+';
+      content = line.substring(1);
+    } else if (line.startsWith('-')) {
+      cls = 'diff-line-del';
+      sign = '-';
+      content = line.substring(1);
+    }
+    return `<div class="diff-line ${cls}"><span class="diff-sign">${escapeHtml(sign)}</span><span class="diff-content">${escapeHtml(content)}</span></div>`;
+  }).join('');
+}
+
+function applyFixToEditor(findingId) {
+  if (!currentReport || !currentReport.findings) return;
+  const finding = currentReport.findings.find(f => f.id === findingId);
+  if (!finding || !finding.remediation || !finding.remediation.corrected_snippet) return;
+
+  const editor = document.getElementById('code-input');
+  if (!editor) return;
+
+  let currentCode = editor.value;
+  let applied = false;
+  const corrected = finding.remediation.corrected_snippet.trim();
+
+  // Strategy 1: Replace exact evidence match
+  if (finding.evidence && finding.evidence.trim() && currentCode.includes(finding.evidence.trim())) {
+    currentCode = currentCode.replace(finding.evidence.trim(), corrected);
+    applied = true;
+  }
+  // Strategy 2: Match original_snippet
+  else if (finding.remediation.original_snippet && currentCode.includes(finding.remediation.original_snippet.trim())) {
+    currentCode = currentCode.replace(finding.remediation.original_snippet.trim(), corrected);
+    applied = true;
+  }
+  // Strategy 3: Target line replacement
+  else if (finding.line_start) {
+    const lines = currentCode.split('\n');
+    const targetIdx = finding.line_start - 1;
+    if (targetIdx >= 0 && targetIdx < lines.length) {
+      const indent = (lines[targetIdx].match(/^\s*/) || [''])[0];
+      const indentedReplacement = corrected.split('\n').map(l => (l.startsWith(' ') || l.startsWith('\t')) ? l : (indent + l)).join('\n');
+      lines[targetIdx] = indentedReplacement;
+      currentCode = lines.join('\n');
+      applied = true;
+    }
+  }
+
+  if (applied) {
+    editor.value = currentCode;
+    updateEditorStats();
+    showToast(`⚡ Remediated "${finding.title}" at line ${finding.line_start}! Click "Run Code Review" to verify health score.`, 'success');
+
+    const btn = document.getElementById(`apply-btn-${findingId}`);
+    if (btn) {
+      btn.innerHTML = '✓ Fix Applied';
+      btn.classList.add('applied');
+      btn.disabled = true;
+    }
+  } else {
+    showToast(`Unable to auto-apply patch. Use "Copy Fix" to apply manually.`, 'error');
+  }
+}
+
+function renderPRSummaryView(report) {
+  const container = document.getElementById('pr-summary-markdown');
+  if (!container || !report.pr_summary) return;
+
+  const pr = report.pr_summary;
+  const verdict = pr.verdict || report.verdict || 'PENDING';
+  let verdictClass = 'verdict-warn';
+  let verdictLabel = 'CHANGES REQUESTED';
+  let verdictIcon = '⚠️';
+
+  if (verdict.includes('APPROV')) {
+    verdictClass = 'verdict-pass';
+    verdictLabel = 'APPROVED · READY TO MERGE';
+    verdictIcon = '✅';
+  } else if (verdict.includes('BLOCK')) {
+    verdictClass = 'verdict-block';
+    verdictLabel = 'MERGE BLOCKED · SECURITY RISKS';
+    verdictIcon = '🛑';
+  }
+
+  const healthScore = pr.health_score !== undefined ? pr.health_score : report.health_score;
+  const riskLevel = pr.risk_level || 'Moderate';
+  const sevs = report.severity_counts || {};
+
+  let actionsHtml = '';
+  if (pr.recommended_actions && pr.recommended_actions.length > 0) {
+    actionsHtml = pr.recommended_actions.map((act, idx) => `
+      <li class="pr-action-item">
+        <span class="pr-action-idx">${idx + 1}</span>
+        <span class="pr-action-text">${escapeHtml(act)}</span>
+      </li>
+    `).join('');
+  } else {
+    actionsHtml = '<li class="pr-action-item"><span class="pr-action-text">No blocker actions detected. Branch meets baseline security criteria.</span></li>';
+  }
+
+  let keyFindingsHtml = '';
+  if (pr.key_findings && pr.key_findings.length > 0) {
+    keyFindingsHtml = pr.key_findings.map(kf => `
+      <div class="pr-key-finding-chip">
+        <span class="kf-dot"></span>
+        <span>${escapeHtml(kf)}</span>
+      </div>
+    `).join('');
+  }
+
+  container.innerHTML = `
+    <div class="pr-review-layout">
+      <!-- PR Hero Banner -->
+      <div class="pr-review-hero ${verdictClass}">
+        <div class="pr-hero-header">
+          <div class="pr-hero-title-box">
+            <div class="pr-hero-meta">
+              <span class="pr-chip-id">PR Review #42</span>
+              <span class="pr-chip-branch">main ← ${escapeHtml(getEffectiveFilename())}</span>
+              <span class="pr-chip-pipeline">🤖 Multi-Agent Orchestration Pipeline</span>
+            </div>
+            <h2 class="pr-hero-title">Automated Pull Request Code Review & Security Audit</h2>
+          </div>
+          <div class="pr-verdict-stamp ${verdictClass}">
+            <span class="stamp-icon">${verdictIcon}</span>
+            <div class="stamp-text">
+              <span class="stamp-status">${verdictLabel}</span>
+              <span class="stamp-sub">Automated Quality Gate</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pr-hero-metrics">
+          <div class="pr-metric-card">
+            <span class="pr-metric-val">${healthScore} / 100</span>
+            <span class="pr-metric-lbl">Composite Health Score</span>
+          </div>
+          <div class="pr-metric-card">
+            <span class="pr-metric-val">${escapeHtml(riskLevel)}</span>
+            <span class="pr-metric-lbl">Assessed Risk Level</span>
+          </div>
+          <div class="pr-metric-card">
+            <span class="pr-metric-val">${sevs.CRITICAL || 0}</span>
+            <span class="pr-metric-lbl">Critical Blockers</span>
+          </div>
+          <div class="pr-metric-card">
+            <span class="pr-metric-val">${report.findings.length}</span>
+            <span class="pr-metric-lbl">Total Audit Findings</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Roadmap & Key Findings -->
+      <div class="pr-grid-split">
+        <div class="pr-card">
+          <div class="pr-card-header">
+            <h3>🎯 Prioritized Remediation Roadmap</h3>
+            <span class="pr-card-badge">Step-by-step fix order</span>
+          </div>
+          <ul class="pr-actions-list">
+            ${actionsHtml}
+          </ul>
+        </div>
+
+        <div class="pr-card">
+          <div class="pr-card-header">
+            <h3>⚠️ Key High-Impact Findings</h3>
+            <span class="pr-card-badge">${(pr.key_findings || []).length} highlights</span>
+          </div>
+          <div class="pr-key-findings-list">
+            ${keyFindingsHtml || '<p style="color: #64748b; font-style: italic;">No high-impact vulnerabilities detected.</p>'}
+          </div>
+        </div>
+      </div>
+
+      <!-- Full Executive Markdown Summary -->
+      <div class="pr-card pr-markdown-container">
+        <div class="pr-card-header">
+          <h3>📋 Full Review Summary & Breakdown</h3>
+          <div class="pr-export-btns">
+            <button class="btn btn-outline" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;" onclick="copyPrSummaryText()">📋 Copy PR Comment</button>
+            <button class="btn btn-outline" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;" onclick="exportReport('pdf')">📄 Export PDF</button>
+            <button class="btn btn-outline" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;" onclick="exportReport('markdown')">⬇️ PR Markdown</button>
+          </div>
+        </div>
+        <div class="pr-body-markdown">
+          ${renderMarkdown(pr.summary_markdown)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function copyPrSummaryText() {
+  if (!currentReport || !currentReport.pr_summary) return;
+  navigator.clipboard.writeText(currentReport.pr_summary.summary_markdown);
+  showToast('Copied full PR Summary Markdown to clipboard!', 'success');
 }
 
 function discussFindingWithAssistant(findingId) {
@@ -749,6 +1008,25 @@ async function sendChatMessage() {
   input.value = '';
   appendChatMessage('user', query);
 
+  const container = document.getElementById('chat-messages');
+  const loadingIndicator = document.createElement('div');
+  loadingIndicator.id = 'chat-loading-indicator';
+  loadingIndicator.className = 'message assistant-message';
+  loadingIndicator.innerHTML = `
+    <div class="msg-avatar">⚖️</div>
+    <div class="msg-body">
+      <div class="msg-header">Aegis Auditor</div>
+      <div class="msg-text" style="font-style: italic; color: #64748b;">
+        Consulting secure coding knowledge base & analyzing code context...
+      </div>
+    </div>
+  `;
+  container.appendChild(loadingIndicator);
+  container.scrollTop = container.scrollHeight;
+
+  const sendBtn = document.getElementById('chat-send-btn');
+  if (sendBtn) sendBtn.disabled = true;
+
   // Send request with code context and findings
   const code = document.getElementById('code-input').value;
   const findings = currentReport ? currentReport.findings : null;
@@ -765,10 +1043,21 @@ async function sendChatMessage() {
       }),
     });
 
+    if (loadingIndicator.parentNode) {
+      loadingIndicator.parentNode.removeChild(loadingIndicator);
+    }
+
+    if (!res.ok) throw new Error('Assistant API returned status ' + res.status);
+
     const data = await res.json();
     appendChatMessage('assistant', data.answer, data.sources, data.suggested_followups);
   } catch (err) {
+    if (loadingIndicator.parentNode) {
+      loadingIndicator.parentNode.removeChild(loadingIndicator);
+    }
     appendChatMessage('assistant', 'Sorry, an error occurred while querying the assistant: ' + err.message);
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
 
@@ -786,7 +1075,7 @@ function appendChatMessage(role, text, sources, followups) {
   if (sources && sources.length > 0) {
     sourceHtml = `
       <div style="margin-top: 0.75rem; border-top: 1px solid #e2ddd3; padding-top: 0.5rem; font-size: 0.78rem; color: #475569;">
-        <strong>📚 Grounded Standards Cited:</strong> ${sources.map(s => escapeHtml(s.title)).join(' • ')}
+        <strong>📚 Grounded Standards Cited:</strong> ${sources.map(s => `<span class="meta-chip owasp" style="display: inline-block; margin: 0.15rem 0.2rem;">${escapeHtml(s.title)}</span>`).join('')}
       </div>
     `;
   }
@@ -794,7 +1083,8 @@ function appendChatMessage(role, text, sources, followups) {
   let followupsHtml = '';
   if (followups && followups.length > 0) {
     followupsHtml = `
-      <div style="margin-top: 0.5rem; display: flex; gap: 0.4rem; flex-wrap: wrap;">
+      <div style="margin-top: 0.65rem; display: flex; gap: 0.4rem; flex-wrap: wrap;">
+        <span style="font-size: 0.74rem; color: #64748b; font-weight: 600; width: 100%;">Suggested Follow-ups:</span>
         ${followups.map(f => `<button class="chip" onclick="askPresetQuestion('${escapeHtml(f)}')">${escapeHtml(f)}</button>`).join('')}
       </div>
     `;
@@ -814,18 +1104,24 @@ function appendChatMessage(role, text, sources, followups) {
   container.scrollTop = container.scrollHeight;
 }
 
-// Utility: Markdown simple parser for bold, headers, code blocks
+// Utility: Markdown simple parser for bold, headers, code blocks with code protection
 function renderMarkdown(md) {
   if (!md) return '';
-  let html = escapeHtml(md);
+
+  // 1. Extract and protect code blocks so newlines are not mangled into <br>
+  const codeBlocks = [];
+  let text = md.replace(/```([\s\S]*?)```/g, (match, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push(code);
+    return `___CODE_BLOCK_${idx}___`;
+  });
+
+  let html = escapeHtml(text);
 
   // Headers
   html = html.replace(/^### (.*$)/gim, '<h3 style="font-size: 1.05rem; margin: 0.85rem 0 0.4rem 0; color: #1e3a5f; font-family: var(--font-heading); font-weight: 700;">$1</h3>');
   html = html.replace(/^## (.*$)/gim, '<h2 style="font-size: 1.2rem; margin: 1.1rem 0 0.5rem 0; color: #1e3a5f; font-family: var(--font-heading); font-weight: 700; border-bottom: 1px solid #e2ddd3; padding-bottom: 0.35rem;">$1</h2>');
   html = html.replace(/^# (.*$)/gim, '<h1 style="font-size: 1.35rem; margin: 1.25rem 0 0.6rem 0; color: #1e3a5f; font-family: var(--font-heading); font-weight: 800; border-bottom: 2px solid #1e3a5f; padding-bottom: 0.45rem;">$1</h1>');
-
-  // Code blocks ```code```
-  html = html.replace(/```([\s\S]*?)```/g, '<pre class="markdown-code-block"><code>$1</code></pre>');
 
   // Inline code `code`
   html = html.replace(/`([^`]+)`/g, '<code class="markdown-inline-code">$1</code>');
@@ -834,7 +1130,7 @@ function renderMarkdown(md) {
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 
   // Bullet items
-  html = html.replace(/^- (.*$)/gim, '<li style="margin-left: 1rem;">$1</li>');
+  html = html.replace(/^- (.*$)/gim, '<li style="margin-left: 1.2rem; list-style-type: disc;">$1</li>');
 
   // Tables
   html = html.replace(/((?:\|[^\n]+\|\r?\n?)+)/g, (match) => {
@@ -851,10 +1147,53 @@ function renderMarkdown(md) {
     return table;
   });
 
-  // Linebreaks (preserve table HTML)
+  // Linebreaks for paragraphs
   html = html.replace(/\n/g, '<br>');
 
+  // 2. Restore protected code blocks with copy button
+  codeBlocks.forEach((code, idx) => {
+    const cleanCode = code.trim();
+    const escapedCode = escapeHtml(cleanCode);
+    const blockHtml = `
+      <div class="code-block-wrapper">
+        <button class="code-block-copy-btn" onclick="copySnippet(this, \`${escapedCode.replace(/`/g, '\\`')}\`)">Copy</button>
+        <pre class="markdown-code-block"><code>${escapedCode}</code></pre>
+      </div>
+    `;
+    html = html.replace(`___CODE_BLOCK_${idx}___`, blockHtml);
+  });
+
   return html;
+}
+
+// Global Toast Notification Helper
+function showToast(message, type = 'info') {
+  let toastContainer = document.getElementById('toast-container');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.id = 'toast-container';
+    toastContainer.className = 'toast-container';
+    document.body.appendChild(toastContainer);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${type === 'success' ? '✓' : (type === 'error' ? '⚠️' : 'ℹ️')}</span>
+    <span class="toast-message">${escapeHtml(message)}</span>
+  `;
+  toastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('show');
+  }, 10);
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 300);
+  }, 4000);
 }
 
 function escapeHtml(text) {

@@ -49,6 +49,13 @@
           </svg>
           Code Assistant
         </button>
+        <button id="nav-btn-kb" class="nav-btn" onclick="switchMainTab('kb')">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+          Knowledge Base
+        </button>
       </nav>
     </div>
   </header>
@@ -80,6 +87,15 @@
             </div>
           </div>
 
+          <!-- Quick Load Sample Bar -->
+          <div class="sample-loader-bar">
+            <span class="sample-bar-label">Load Preset:</span>
+            <button class="sample-chip" onclick="loadSampleFile('python_vulnerable_sqli_secrets')" title="Load Python SQL Injection, Weak MD5, Hardcoded Credentials">🐍 Py Vulnerable</button>
+            <button class="sample-chip" onclick="loadSampleFile('java_VulnerableAuthApp')" title="Load Java Path Traversal, Hardcoded Key, Weak PRNG">☕ Java Vulnerable</button>
+            <button class="sample-chip" onclick="loadSampleFile('python_secure_sample')" title="Load Secure Python Implementation (Argon2id, Parameterized SQL)">🛡️ Py Secure</button>
+            <button class="sample-chip" onclick="loadSampleFile('java_SecureAuthApp')" title="Load Secure Java Implementation (PreparedStatement, SecureRandom)">🛡️ Java Secure</button>
+          </div>
+
           <!-- File Upload Drop Zone -->
           <div id="drop-zone" class="drop-zone" onclick="document.getElementById('file-input').click()">
             <input type="file" id="file-input" class="hidden-input" accept=".py,.java"
@@ -94,6 +110,18 @@
 
           <!-- Code Editor Area -->
           <div class="editor-container">
+            <div class="editor-header-bar">
+              <div class="editor-file-info">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                <span id="editor-filename">main.py</span>
+              </div>
+              <div class="editor-meta-stats">
+                <span id="editor-line-count">0 lines</span>
+                <span class="meta-separator">•</span>
+                <span id="editor-char-count">0 chars</span>
+                <button class="editor-clear-btn" onclick="clearEditor()" title="Clear editor content">Clear</button>
+              </div>
+            </div>
             <textarea id="code-input" class="code-editor" spellcheck="false"
               placeholder="// Paste Python or Java source code here..."></textarea>
           </div>
@@ -237,12 +265,12 @@
 
             <!-- Findings Filter Tabs -->
             <div class="findings-filter-bar">
-              <button class="filter-btn active" id="tab-btn-all" onclick="filterFindings('ALL')">All (<span id="count-all">0</span>)</button>
+              <button class="filter-btn active" id="tab-btn-all" onclick="filterFindings('ALL')">All Findings (<span id="count-all">0</span>)</button>
               <button class="filter-btn" id="tab-btn-sec" onclick="filterFindings('SECURITY')">Security (<span id="count-sec">0</span>)</button>
-              <button class="filter-btn" id="tab-btn-qual" onclick="filterFindings('QUALITY')">Code quality (<span id="count-qual">0</span>)</button>
-              <button class="filter-btn" id="tab-btn-details" onclick="switchFindingsTab('details')">Details</button>
+              <button class="filter-btn" id="tab-btn-qual" onclick="filterFindings('QUALITY')">Code Quality (<span id="count-qual">0</span>)</button>
+              <button class="filter-btn btn-pr-tab" id="tab-btn-pr" onclick="switchFindingsTab('pr')">PR Review Summary</button>
+              <button class="filter-btn" id="tab-btn-details" onclick="switchFindingsTab('details')">Agent Telemetry</button>
               <button class="filter-btn" id="tab-btn-report" onclick="switchFindingsTab('report')">Benchmark Report</button>
-              <button class="filter-btn btn-pr-tab" id="tab-btn-pr" onclick="switchFindingsTab('pr')">PR Summary</button>
             </div>
 
             <!-- Findings Card List -->
@@ -264,7 +292,7 @@
 
             <!-- PR Summary View Container -->
             <div id="pr-summary-view" class="pr-summary-view hidden">
-              <div class="pr-summary-content" id="pr-summary-markdown"></div>
+              <div class="pr-summary-container" id="pr-summary-markdown"></div>
             </div>
           </div>
         </div>
@@ -353,7 +381,10 @@
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=7"></script>
+  <!-- Notification Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/static/js/app.js?v=8"></script>
 </body>
 
 </html>
