@@ -43,6 +43,15 @@
           </svg>
           Review Studio
         </button>
+        <button id="nav-btn-pr" class="nav-btn" onclick="openPrSummaryTab()">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="18" cy="18" r="3" />
+            <circle cx="6" cy="6" r="3" />
+            <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+            <line x1="6" y1="9" x2="6" y2="21" />
+          </svg>
+          PR Summary Agent
+        </button>
         <button id="nav-btn-assistant" class="nav-btn" onclick="switchMainTab('chat')">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -59,6 +68,20 @@
       </nav>
     </div>
   </header>
+
+  <!-- Milestone 3 Architecture Banner -->
+  <div class="milestone-banner">
+    <div class="milestone-badge">MILESTONE 3 LIVE</div>
+    <div class="milestone-items">
+      <span class="m3-item" onclick="switchMainTab('review')"><strong>1. Remediation Agent</strong> (Diffs, Fixes & Unit Tests)</span>
+      <span class="m3-dot">•</span>
+      <span class="m3-item" onclick="openPrSummaryTab()"><strong>2. PR Summary Agent</strong> (Executive Review & Roadmap)</span>
+      <span class="m3-dot">•</span>
+      <span class="m3-item" onclick="switchMainTab('review')"><strong>3. Findings Display Module</strong> (Score & Severity Portal)</span>
+      <span class="m3-dot">•</span>
+      <span class="m3-item" onclick="switchMainTab('chat')"><strong>4. Conversational Code Assistant</strong> (RAG Q&A)</span>
+    </div>
+  </div>
 
   <!-- Main View Container -->
   <main class="app-main">

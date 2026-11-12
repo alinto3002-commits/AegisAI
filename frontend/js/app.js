@@ -24,6 +24,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupCodeEditorStats();
   await loadKnowledgeBaseStats();
   updateEditorStats();
+
+  // Milestone 3: Auto-load default sample on initial visit so all 4 modules are immediately visible
+  const editor = document.getElementById('code-input');
+  if (editor && (!editor.value || !editor.value.trim())) {
+    await loadSampleFile('python_vulnerable_sqli_secrets');
+    await triggerMultiAgentReview();
+  }
 });
 
 // Setup line counter & live auto-identification on typing, paste, and change
@@ -196,6 +203,20 @@ function switchMainTab(tab) {
     const btn = document.getElementById('nav-btn-assistant');
     if (btn) btn.classList.add('active');
   }
+}
+
+// Direct Navigation to PR Summary Agent (Milestone 3)
+async function openPrSummaryTab() {
+  switchMainTab('review');
+  const navBtnPr = document.getElementById('nav-btn-pr');
+  if (navBtnPr) {
+    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+    navBtnPr.classList.add('active');
+  }
+  if (!currentReport) {
+    await triggerMultiAgentReview();
+  }
+  switchFindingsTab('pr');
 }
 
 // File Drag & Drop / Upload
