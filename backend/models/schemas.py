@@ -97,6 +97,9 @@ class ReviewReport(BaseModel):
     pr_summary: PRReviewSummary
     agent_execution_times: Dict[str, float] = Field(default_factory=dict)
     execution_details: List[AgentExecutionDetail] = Field(default_factory=list)
+    is_remediated: bool = False
+    initial_health_score: Optional[int] = None
+    resolved_findings: List[Dict[str, Any]] = Field(default_factory=list)
 
 class ChatQuery(BaseModel):
     query: str

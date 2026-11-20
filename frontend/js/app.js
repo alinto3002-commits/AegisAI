@@ -7,6 +7,8 @@ let currentLanguage = 'python';
 let currentReport = null;
 let currentFilter = 'ALL';
 let currentUploadedFilename = '';
+let initialAuditReport = null;
+let resolvedFindingsHistory = [];
 
 function getEffectiveFilename() {
   const fileEl = document.getElementById('editor-filename');
@@ -165,6 +167,8 @@ function clearEditor() {
     editor.value = '';
     currentUploadedFilename = null;
     currentReport = null;
+    initialAuditReport = null;
+    resolvedFindingsHistory = [];
     const fileEl = document.getElementById('editor-filename');
     if (fileEl) fileEl.textContent = 'main.py';
     updateEditorStats();
@@ -353,7 +357,50 @@ async function triggerMultiAgentReview() {
     const response = await reviewPromise;
     if (!response.ok) throw new Error('Review failed with status ' + response.status);
 
-    currentReport = await response.json();
+    const newReport = await response.json();
+
+    if (!initialAuditReport) {
+      // First review: record as initial audit baseline
+      initialAuditReport = JSON.parse(JSON.stringify(newReport));
+    } else {
+      // Compare initial findings against new findings to catch any fixed errors
+      const newFindingKeys = new Set(newReport.findings.map(f => `${f.title}_${f.line_start}`));
+      initialAuditReport.findings.forEach(initF => {
+        const key = `${initF.title}_${initF.line_start}`;
+        if (!newFindingKeys.has(key)) {
+          const already = resolvedFindingsHistory.some(r => r.title === initF.title && r.line_start === initF.line_start);
+          if (!already) {
+            resolvedFindingsHistory.push({
+              id: initF.id,
+              title: initF.title,
+              severity: typeof initF.severity === 'object' ? initF.severity.value : initF.severity,
+              line_start: initF.line_start,
+              line_end: initF.line_end,
+              owasp_category: initF.owasp_category || 'General',
+              cwe_id: initF.cwe_id || 'N/A',
+              category: initF.category || 'Security',
+              description: initF.description,
+              evidence: initF.evidence || (initF.remediation ? initF.remediation.original_snippet : ''),
+              remediation: {
+                original_snippet: initF.remediation ? initF.remediation.original_snippet : (initF.evidence || ''),
+                corrected_snippet: initF.remediation ? initF.remediation.corrected_snippet : '',
+                explanation: initF.remediation ? initF.remediation.explanation : 'Replaced insecure pattern with safe parameterized API / defensive logic.',
+                diff: initF.remediation ? initF.remediation.diff : ''
+              },
+              resolved_at: new Date().toISOString()
+            });
+          }
+        }
+      });
+    }
+
+    if (resolvedFindingsHistory.length > 0) {
+      newReport.is_remediated = true;
+      newReport.resolved_findings = resolvedFindingsHistory;
+      newReport.initial_health_score = initialAuditReport.health_score;
+    }
+
+    currentReport = newReport;
 
     setStepState('step-pr-agent', 'done');
 
@@ -392,6 +439,8 @@ async function loadSampleFile(sampleKey) {
     const editor = document.getElementById('code-input');
     editor.value = sample.code;
     currentUploadedFilename = sample.name;
+    initialAuditReport = null;
+    resolvedFindingsHistory = [];
     const fileEl = document.getElementById('editor-filename');
     if (fileEl) fileEl.textContent = sample.name;
     currentLanguage = sample.language;
@@ -780,6 +829,35 @@ function applyFixToEditor(findingId) {
     lines.splice(targetIdx, span, formattedReplacement);
     editor.value = lines.join('\n');
     updateEditorStats();
+
+    // Record finding into resolution history (The Error Before vs What Changed To Solve It)
+    const findingRecord = {
+      id: finding.id,
+      title: finding.title,
+      severity: typeof finding.severity === 'object' ? finding.severity.value : finding.severity,
+      line_start: finding.line_start,
+      line_end: finding.line_end,
+      owasp_category: finding.owasp_category || 'General',
+      cwe_id: finding.cwe_id || 'N/A',
+      category: finding.category || 'Security',
+      description: finding.description,
+      evidence: finding.evidence || (finding.remediation ? finding.remediation.original_snippet : ''),
+      remediation: {
+        original_snippet: finding.remediation ? finding.remediation.original_snippet : (finding.evidence || ''),
+        corrected_snippet: formattedReplacement || (finding.remediation ? finding.remediation.corrected_snippet : ''),
+        explanation: finding.remediation ? finding.remediation.explanation : 'Replaced insecure pattern with safe parameterized API / defensive logic.',
+        diff: finding.remediation ? finding.remediation.diff : ''
+      },
+      resolved_at: new Date().toISOString()
+    };
+
+    const existingIdx = resolvedFindingsHistory.findIndex(r => r.id === finding.id || (r.title === finding.title && r.line_start === finding.line_start));
+    if (existingIdx >= 0) {
+      resolvedFindingsHistory[existingIdx] = findingRecord;
+    } else {
+      resolvedFindingsHistory.push(findingRecord);
+    }
+
     showToast(`⚡ Remediated "${finding.title}"! Re-evaluating health score...`, 'success');
 
     const btn = document.getElementById(`apply-btn-${findingId}`);
@@ -1151,11 +1229,14 @@ async function exportReport(format) {
     const a = document.createElement('a');
     a.href = url;
     const ext = format === 'pdf' ? 'pdf' : (format === 'markdown' ? 'md' : 'json');
-    a.download = `review_report_${currentReport.id}.${ext}`;
+    const isRemediated = currentReport.is_remediated || (currentReport.resolved_findings && currentReport.resolved_findings.length > 0);
+    const prefix = isRemediated ? 'remediation_resolution_report' : 'initial_audit_report';
+    a.download = `${prefix}_${currentReport.id}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+    showToast(`Downloaded ${isRemediated ? 'Post-Remediation Resolution' : 'Pre-Remediation Initial Audit'} report (${format.toUpperCase()})`, 'success');
   } catch (err) {
     alert('Export error: ' + err.message);
   }
