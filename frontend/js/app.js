@@ -359,16 +359,56 @@ async function triggerMultiAgentReview() {
 
     const newReport = await response.json();
 
+// Helper to determine if an existing finding is still present in the updated findings list
+// Resilient to line number shifts caused by inserting or modifying code
+function isFindingStillPresent(finding, currentFindings) {
+  if (!currentFindings || currentFindings.length === 0) return false;
+
+  const targetTitle = (finding.title || '').trim().toLowerCase();
+  const targetCwe = (finding.cwe_id || '').trim().toLowerCase();
+  const targetSnippet = ((finding.evidence || (finding.remediation && finding.remediation.original_snippet)) || '').trim();
+  const targetLine = finding.line_start || 0;
+
+  return currentFindings.some(cf => {
+    const cfTitle = (cf.title || '').trim().toLowerCase();
+    const cfCwe = (cf.cwe_id || '').trim().toLowerCase();
+    const cfSnippet = ((cf.evidence || (cf.remediation && cf.remediation.original_snippet)) || '').trim();
+    const cfLine = cf.line_start || 0;
+
+    // 1. Same title and line number is reasonably close (shifted by edits up to 35 lines)
+    if (targetTitle && cfTitle && targetTitle === cfTitle && Math.abs(targetLine - cfLine) <= 35) {
+      return true;
+    }
+
+    // 2. Exact same vulnerable code evidence snippet still present in new findings
+    if (targetSnippet && cfSnippet && targetSnippet.length > 8 && (cfSnippet.includes(targetSnippet) || targetSnippet.includes(cfSnippet))) {
+      return true;
+    }
+
+    // 3. Same specific CWE and exact same line or nearby line
+    if (targetCwe && cfCwe && targetCwe !== 'n/a' && targetCwe === cfCwe && Math.abs(targetLine - cfLine) <= 20) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
     if (!initialAuditReport) {
       // First review: record as initial audit baseline
       initialAuditReport = JSON.parse(JSON.stringify(newReport));
     } else {
-      // Compare initial findings against new findings to catch any fixed errors
-      const newFindingKeys = new Set(newReport.findings.map(f => `${f.title}_${f.line_start}`));
+      // 1. Clean resolved history: remove any finding that is STILL present in current findings
+      resolvedFindingsHistory = resolvedFindingsHistory.filter(r => !isFindingStillPresent(r, newReport.findings));
+
+      // 2. Compare initial findings against new findings using fuzzy line shift & evidence matching
       initialAuditReport.findings.forEach(initF => {
-        const key = `${initF.title}_${initF.line_start}`;
-        if (!newFindingKeys.has(key)) {
-          const already = resolvedFindingsHistory.some(r => r.title === initF.title && r.line_start === initF.line_start);
+        const stillPresent = isFindingStillPresent(initF, newReport.findings);
+        if (!stillPresent) {
+          const already = resolvedFindingsHistory.some(r =>
+            r.id === initF.id ||
+            ((r.title || '').trim().toLowerCase() === (initF.title || '').trim().toLowerCase() && Math.abs((r.line_start || 0) - (initF.line_start || 0)) <= 35)
+          );
           if (!already) {
             resolvedFindingsHistory.push({
               id: initF.id,
@@ -394,10 +434,16 @@ async function triggerMultiAgentReview() {
       });
     }
 
+    // Filter resolved findings to guarantee NONE of them are still present in newReport.findings
+    resolvedFindingsHistory = resolvedFindingsHistory.filter(r => !isFindingStillPresent(r, newReport.findings));
+
     if (resolvedFindingsHistory.length > 0) {
       newReport.is_remediated = true;
       newReport.resolved_findings = resolvedFindingsHistory;
       newReport.initial_health_score = initialAuditReport.health_score;
+    } else {
+      newReport.is_remediated = false;
+      newReport.resolved_findings = [];
     }
 
     currentReport = newReport;
@@ -598,7 +644,9 @@ function filterFindings(filter) {
   container.innerHTML = '';
 
   const findings = (currentReport && currentReport.findings) ? currentReport.findings : [];
-  const resolved = (currentReport && currentReport.resolved_findings) ? currentReport.resolved_findings : (resolvedFindingsHistory || []);
+  let resolved = (currentReport && currentReport.resolved_findings) ? currentReport.resolved_findings : (resolvedFindingsHistory || []);
+  // Ensure resolved findings never include any finding still present in findings
+  resolved = resolved.filter(r => !isFindingStillPresent(r, findings));
 
   if (findings.length === 0 && resolved.length === 0) {
     container.innerHTML = `<div class="findings-placeholder"><p>No findings match the selected filter.</p></div>`;

@@ -187,6 +187,95 @@ def test_report_generation():
     assert 'Load secret token from environment variables' in md_partial
     assert len(pdf_partial) > 1000
 
+    # 4. Test Overlap Deduplication: if an unsolved finding was incorrectly in resolved_findings
+    overlap_report = ReviewReport(
+        id='test-overlap-101',
+        filename='vulnerable_app.py',
+        language='python',
+        lines_of_code=45,
+        cyclomatic_complexity=3,
+        health_score=75,
+        verdict='CHANGES_REQUESTED',
+        risk_level='Medium',
+        findings=[
+            Finding(
+                id='SEC-SECRET-002',
+                title='Hardcoded Sensitive API Token',
+                severity=FindingSeverity.HIGH,
+                line_start=10,
+                line_end=10,
+                cwe_id='CWE-798',
+                owasp_category='A07:2025 - Identification and Authentication Failures',
+                category='Security',
+                description='Hardcoded secret credential exposed in source code repository.',
+                evidence='API_TOKEN = "sk-live-secret-token-xyz"',
+                agent_type='Security Vulnerability Agent',
+                remediation=RemediationSuggestion(
+                    original_snippet='API_TOKEN = "sk-live-secret-token-xyz"',
+                    explanation='Load secret token from environment variables or a vault.',
+                    corrected_snippet='API_TOKEN = os.getenv("API_TOKEN")',
+                    diff='- API_TOKEN = "..."\n+ API_TOKEN = os.getenv("API_TOKEN")',
+                    remediation_steps=['Extract token to environment variable']
+                )
+            )
+        ],
+        is_remediated=True,
+        initial_health_score=35,
+        pr_summary=PRReviewSummary(
+            verdict='CHANGES_REQUESTED',
+            risk_level='Medium',
+            health_score=75,
+            summary_markdown='1 resolved, 1 remaining.',
+            recommended_actions=['Fix API token']
+        ),
+        resolved_findings=[
+            {
+                'id': 'SEC-SQLI-001',
+                'title': 'SQL Injection via Unescaped String Formatting',
+                'severity': 'CRITICAL',
+                'line_start': 14,
+                'line_end': 14,
+                'cwe_id': 'CWE-89',
+                'owasp_category': 'A03:2025 - Injection',
+                'description': 'Unsanitized input directly formatted into SQL query string enables arbitrary database execution.',
+                'evidence': 'query = f"SELECT * FROM users WHERE username = \'{user}\'"',
+                'remediation': {
+                    'explanation': 'Replaced insecure f-string with parameterized query placeholder (?).',
+                    'original_snippet': 'query = f"SELECT * FROM users WHERE username = \'{user}\'"',
+                    'corrected_snippet': 'cursor.execute("SELECT * FROM users WHERE username = ?", (user,))',
+                    'diff': '- query = f"SELECT..."\n+ cursor.execute("SELECT...", (user,))'
+                }
+            },
+            # THIS ONE IS STILL IN FINDINGS (Hardcoded Sensitive API Token) - should be filtered out!
+            {
+                'id': 'SEC-SECRET-002',
+                'title': 'Hardcoded Sensitive API Token',
+                'severity': 'HIGH',
+                'line_start': 8,
+                'line_end': 8,
+                'cwe_id': 'CWE-798',
+                'owasp_category': 'A07:2025 - Identification and Authentication Failures',
+                'description': 'Hardcoded secret credential exposed in source code repository.',
+                'evidence': 'API_TOKEN = "sk-live-secret-token-xyz"',
+                'remediation': {
+                    'explanation': 'Load secret token from environment variables or a vault.',
+                    'original_snippet': 'API_TOKEN = "sk-live-secret-token-xyz"',
+                    'corrected_snippet': 'API_TOKEN = os.getenv("API_TOKEN")',
+                    'diff': '- API_TOKEN = "..."\n+ API_TOKEN = os.getenv("API_TOKEN")'
+                }
+            }
+        ]
+    )
+
+    md_overlap = CodeReviewReportGenerator.to_markdown(overlap_report)
+    print('\n=== CASE 4 (OVERLAP DEDUPLICATION) ===')
+    # Should only have 1 issue successfully remediated (SQL Injection), not 2!
+    print('Remediated text:', '1 Issues Successfully Remediated' in md_overlap)
+    assert '1 Issues Successfully Remediated' in md_overlap
+    assert '[RESOLVED] SQL Injection via Unescaped String Formatting' in md_overlap
+    assert '[RESOLVED] Hardcoded Sensitive API Token' not in md_overlap
+    assert '[UNSOLVED] [HIGH] Hardcoded Sensitive API Token' in md_overlap
+
     print('\nAll assertions passed successfully! Both report structures verified.')
 
 if __name__ == '__main__':

@@ -45,11 +45,17 @@ class CodeReviewReportGenerator:
         - Before error solving: full audit with all findings, evidence, guidelines, tests.
         - After error solving: shows the error before and what changes happened to solve it.
         """
-        is_remed = getattr(report, "is_remediated", False) and bool(getattr(report, "resolved_findings", []))
+        # Ensure resolved findings cannot contain any finding that is still in report.findings
+        unsolved_titles = {getattr(f, "title", "").strip().lower() for f in report.findings}
+        raw_resolved = getattr(report, "resolved_findings", [])
+        resolved = [
+            f for f in raw_resolved
+            if safe_get(f, "title", "").strip().lower() not in unsolved_titles
+        ]
+        is_remed = getattr(report, "is_remediated", False) and bool(resolved)
 
         if is_remed:
             # POST-REMEDIATION VERIFICATION REPORT
-            resolved = report.resolved_findings
             init_score = getattr(report, "initial_health_score", None) or "N/A"
             final_score = report.health_score
             gain = f"+{final_score - init_score}" if isinstance(init_score, int) and isinstance(final_score, int) else ""
@@ -322,13 +328,19 @@ class CodeReviewReportGenerator:
 
             elements = []
 
-            is_remed = getattr(report, "is_remediated", False) and bool(getattr(report, "resolved_findings", []))
+            # Ensure resolved findings cannot contain any finding that is still in report.findings
+            unsolved_titles = {getattr(f, "title", "").strip().lower() for f in report.findings}
+            raw_resolved = getattr(report, "resolved_findings", [])
+            resolved = [
+                f for f in raw_resolved
+                if safe_get(f, "title", "").strip().lower() not in unsolved_titles
+            ]
+            is_remed = getattr(report, "is_remediated", False) and bool(resolved)
 
             if is_remed:
                 # =========================================================================
                 # POST-REMEDIATION VERIFICATION PDF (Errors Before & Changes That Solved Them)
                 # =========================================================================
-                resolved = report.resolved_findings
                 init_score = getattr(report, "initial_health_score", None) or "N/A"
                 final_score = report.health_score
 
