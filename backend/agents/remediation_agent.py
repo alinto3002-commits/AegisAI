@@ -105,10 +105,44 @@ class RemediationAgent(BaseAgent):
         cwe = (finding.cwe_id or "").upper()
         title = finding.title.lower()
 
+        # Unused Import (CWE-561) - check before keyword matches like 'pickle'
+        if "unused import" in title:
+            ev = (finding.evidence or orig).strip()
+            # Try Gemini first to see if it's a misspelled import (e.g. import sqllite3 -> import sqlite3)
+            try:
+                from backend.modules.gemini_fixer import correct_code_line_with_gemini
+                gemini_fix = correct_code_line_with_gemini(
+                    faulty_line=ev,
+                    context_lines=context_window,
+                    language=language,
+                    error_msg=finding.title
+                )
+                if gemini_fix and gemini_fix != ev and ("import " in gemini_fix or "from " in gemini_fix):
+                    return gemini_fix
+            except Exception:
+                pass
+
+            # Local fallback: check close match against common standard library modules or words in code
+            import difflib
+            common_modules = [
+                "sqlite3", "hashlib", "pickle", "json", "os", "sys", "subprocess",
+                "math", "re", "logging", "requests", "urllib", "random", "time",
+                "datetime", "pathlib", "collections"
+            ]
+            m = re.search(r"import\s+([a-zA-Z0-9_]+)", ev)
+            if m:
+                mod_name = m.group(1)
+                close = difflib.get_close_matches(mod_name, common_modules, n=1, cutoff=0.7)
+                if close and close[0] != mod_name:
+                    return ev.replace(mod_name, close[0])
+
+            # If genuinely unused and not a typo, preserve the line rather than deleting it
+            return ev
+
         # 0. Wildcard Imports (CWE-710) - check first to avoid collision with java.sql.*
         if "wildcard" in title or "SMELL-JAVA-WILDCARD" in finding.id or "710" in cwe:
             if language == "python":
-                return "# Explicitly import required components:\nfrom module import SpecificClass, specific_function"
+                return "from module import SpecificClass, specific_function"
             else:
                 # Extract suggested explicit imports from description if available
                 if "import " in finding.description:
@@ -120,10 +154,16 @@ class RemediationAgent(BaseAgent):
         # 1. SQL Injection (CWE-89)
         if ("sql" in title or "sqli" in finding.id.lower()) and "wildcard" not in title:
             if language == "python":
-                return (
-                    "# Use parameterized query bindings instead of string formatting:\n"
-                    "cursor.execute(\"SELECT * FROM users WHERE username = ?\", (username,))"
-                )
+                ev = finding.evidence or orig
+                fmatch = re.search(r'f["\'](.*?)["\']', ev)
+                if fmatch:
+                    sql_template = fmatch.group(1)
+                    params = re.findall(r'\{([a-zA-Z0-9_]+)\}', sql_template)
+                    clean_sql = re.sub(r'[\'"]?\{[a-zA-Z0-9_]+\}[\'"]?', '?', sql_template)
+                    if params:
+                        param_tuple = f"({params[0]},)" if len(params) == 1 else f"({', '.join(params)})"
+                        return f'cursor.execute("{clean_sql}", {param_tuple})'
+                return 'cursor.execute("SELECT * FROM users WHERE username = ?", (username,))'
             else:
                 return (
                     "// Use java.sql.PreparedStatement with bind variables:\n"
@@ -135,12 +175,16 @@ class RemediationAgent(BaseAgent):
         # 2. Path Traversal (CWE-22)
         if "path" in title or "traversal" in title or "path" in finding.id.lower():
             if language == "python":
+                ev = finding.evidence or orig
+                var_name = "filepath"
+                if "=" in ev:
+                    cand = ev.split("=")[0].strip()
+                    if cand.isidentifier():
+                        var_name = cand
                 return (
-                    "# Normalize and canonicalize path to prevent directory traversal:\n"
-                    "import os\n"
                     "base_dir = os.path.abspath('uploads')\n"
-                    "target_path = os.path.abspath(os.path.join(base_dir, filename))\n"
-                    "if not target_path.startswith(base_dir):\n"
+                    f"{var_name} = os.path.abspath(os.path.join(base_dir, filename))\n"
+                    f"if not {var_name}.startswith(base_dir):\n"
                     "    raise PermissionError('Path traversal attempt detected')"
                 )
             else:
@@ -156,22 +200,7 @@ class RemediationAgent(BaseAgent):
         # 3. Command Injection (CWE-78)
         if "command injection" in title or "os.system" in title or "exec" in finding.id.lower():
             if language == "python":
-                return (
-                    "# 1. Strictly validate host input (IP address or DNS hostname format) to prevent argument injection:\n"
-                    "import ipaddress, re, subprocess\n\n"
-                    "def is_valid_host(val: str) -> bool:\n"
-                    "    if not val or val.startswith('-'):\n"
-                    "        return False\n"
-                    "    try:\n"
-                    "        ipaddress.ip_address(val)\n"
-                    "        return True\n"
-                    "    except ValueError:\n"
-                    "        return bool(re.match(r'^[a-zA-Z0-9.-]{1,253}$', val))\n\n"
-                    "if not is_valid_host(host):\n"
-                    "    raise ValueError(f'Invalid host format: {host}')\n\n"
-                    "# 2. Pass arguments as a safe list with shell=False (avoids shell interpolation):\n"
-                    "subprocess.run(['ping', '-c', '1', host], check=True, shell=False)"
-                )
+                return "subprocess.run(['ping', '-c', '1', host], check=True, shell=False)"
             else:
                 return (
                     "// 1. Strictly validate host input to prevent parameter injection:\n"
@@ -187,10 +216,8 @@ class RemediationAgent(BaseAgent):
         if "338" in cwe or "prng" in title or "pseudo-random" in title or "weakprng" in finding.id.lower():
             if language == "python":
                 return (
-                    "# Use Python's 'secrets' module for cryptographically secure tokens and nonces (CWE-338):\n"
                     "import secrets\n"
-                    "reset_token = secrets.token_urlsafe(32)\n"
-                    "# Or for cryptographic integers: secrets.randbelow(1000000)"
+                    "reset_token = secrets.token_urlsafe(32)"
                 )
             else:
                 return (
@@ -205,7 +232,6 @@ class RemediationAgent(BaseAgent):
         if "327" in cwe or "ecb" in title or "cipher" in title or "ecbcipher" in finding.id.lower():
             if language == "python":
                 return (
-                    "# Use authenticated encryption with AES.MODE_GCM (12-byte nonce, 128-bit auth tag) (CWE-327):\n"
                     "from Crypto.Cipher import AES\n"
                     "import secrets\n"
                     "nonce = secrets.token_bytes(12)\n"
@@ -228,14 +254,9 @@ class RemediationAgent(BaseAgent):
         if "347" in cwe or ("jwt" in title and "hardcoded" not in title) or "jwt-symmetric" in finding.id.lower():
             if language == "python":
                 return (
-                    "# Secure JWT configuration and verification (CWE-347):\n"
                     "import os, jwt\n"
-                    "# 1. Load strong secret (minimum 256 bits for HS256) from environment / secrets manager:\n"
-                    "jwt_secret = os.environ.get('JWT_SECRET')\n"
-                    "# 2. Enforce explicit algorithm allowlisting and cryptographic signature verification:\n"
-                    "payload = jwt.decode(token, jwt_secret, algorithms=['HS256'])\n"
-                    "# 3. For distributed verification across microservices, migrate to asymmetric RS256/ES256 keys.\n"
-                    "# 4. Rotate signing secret immediately if credentials have been exposed."
+                    "jwt_secret = os.environ.get('JWT_SECRET', '')\n"
+                    "payload = jwt.decode(token, jwt_secret, algorithms=['HS256'])"
                 )
             else:
                 return (
@@ -255,8 +276,13 @@ class RemediationAgent(BaseAgent):
 
         # 7. Hardcoded Secrets / Keys / Credentials (CWE-798)
         if "798" in cwe or "hardcoded" in title or "secret" in title:
+            ev = finding.evidence or orig
             var_name = "API_KEY"
-            if "jwt" in title:
+            if "=" in ev:
+                candidate = ev.split("=")[0].strip()
+                if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', candidate):
+                    var_name = candidate
+            elif "jwt" in title:
                 var_name = "JWT_SECRET"
             elif "aes" in title or "symmetric key" in title:
                 var_name = "AES_KEY"
@@ -264,29 +290,14 @@ class RemediationAgent(BaseAgent):
                 var_name = "DB_PASSWORD"
 
             if language == "python":
-                return (
-                    f"# Recommended Credential Management (CWE-798):\n"
-                    f"# 1. Basic / Dev: Retrieve secret from environment variable:\n"
-                    f"import os\n"
-                    f"{var_name} = os.environ.get('{var_name}')\n"
-                    f"if not {var_name}:\n"
-                    f"    raise ValueError('{var_name} environment variable is missing')\n\n"
-                    f"# 2. Production: Use a dedicated Secrets Manager (e.g. AWS Secrets Manager, HashiCorp Vault).\n"
-                    f"# Note: Environment variables alone do not mitigate all secret-leakage risks (process memory dumps,\n"
-                    f"# child process inheritance, container inspection). Use a secrets manager with automatic rotation.\n"
-                    f"# IMPORTANT: Rotate any exposed secrets immediately since they may exist in version control history."
-                )
+                return f"{var_name} = os.environ.get('{var_name}', '')"
             else:
                 return (
                     f"// Recommended Credential Management (CWE-798):\n"
                     f"// 1. Basic / Dev: Retrieve secret from environment variable:\n"
-                    f"String secret = System.getenv(\"{var_name}\");\n"
-                    f"if (secret == null || secret.isBlank()) {{\n"
-                    f"    throw new IllegalStateException(\"{var_name} environment variable is missing\");\n"
-                    f"}}\n\n"
+                    f"String {var_name} = System.getenv(\"{var_name}\");\n"
                     f"// 2. Production: Retrieve from dedicated Secrets Manager (e.g. AWS Secrets Manager, HashiCorp Vault):\n"
-                    f"// Note: Environment variables alone do not mitigate all secret-leakage risks (process memory dumps,\n"
-                    f"// child process inheritance, container inspection). Use a secrets manager with automatic rotation.\n"
+                    f"// Note: Environment variables alone do not mitigate all secret-leakage risks (process memory dumps).\n"
                     f"// IMPORTANT: Rotate any exposed secrets immediately since they may exist in version control history."
                 )
 
@@ -297,11 +308,10 @@ class RemediationAgent(BaseAgent):
             first_type = sugg_types.split(",")[0].strip()
             if language == "python":
                 return (
-                    "# Declare and handle specific exception types explicitly:\n"
                     "try:\n"
                     "    perform_operation()\n"
                     "except (ValueError, KeyError) as err:\n"
-                    "    logger.warning('Handled specific error: %s', err)"
+                    "    pass"
                 )
             else:
                 return (
@@ -324,14 +334,17 @@ class RemediationAgent(BaseAgent):
 
             if is_password:
                 if language == "python":
-                    return (
-                        "# For password storage, use Argon2id (recommended) or bcrypt (NEVER plain SHA-256 or MD5):\n"
-                        "from argon2 import PasswordHasher\n\n"
-                        "# Configured with 16-byte salt, 64MB memory cost, 4 threads, 3 iterations:\n"
-                        "ph = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)\n"
-                        "hashed_password = ph.hash(raw_password)\n"
-                        "# Verification: ph.verify(hashed_password, candidate_password)"
-                    )
+                    ev = finding.evidence or orig
+                    var_name = "hashed"
+                    arg_name = "password"
+                    if "=" in ev:
+                        cand = ev.split("=")[0].strip()
+                        if cand.isidentifier():
+                            var_name = cand
+                    m = re.search(r'\((.*?)\.encode', ev)
+                    if m:
+                        arg_name = m.group(1).strip()
+                    return f"{var_name} = hashlib.sha256({arg_name}.encode()).hexdigest()"
                 else:
                     return (
                         "// For password storage, use Argon2id or bcrypt (NEVER plain MD5 or SHA-256):\n"
@@ -344,7 +357,6 @@ class RemediationAgent(BaseAgent):
             elif is_checksum:
                 if language == "python":
                     return (
-                        "# For non-password data integrity / file digests, use SHA-256 or SHA-512:\n"
                         "import hashlib\n"
                         "digest = hashlib.sha256(data.encode('utf-8')).hexdigest()"
                     )
@@ -355,27 +367,14 @@ class RemediationAgent(BaseAgent):
                         "byte[] hash = md.digest(data.getBytes(StandardCharsets.UTF_8));"
                     )
             else:
-                # Unknown purpose: explain context dependency and provide safe options
                 if language == "python":
                     return (
-                        "# Context-dependent cryptographic remediation:\n"
-                        "# CASE 1 - Password / Credential Storage (Use Argon2id or bcrypt; NEVER plain SHA-256 or MD5):\n"
-                        "#   from argon2 import PasswordHasher\n"
-                        "#   hashed = PasswordHasher().hash(raw_password)\n"
-                        "#\n"
-                        "# CASE 2 - Message Digest / File Integrity Checksum (Use SHA-256 or SHA-512):\n"
                         "import hashlib\n"
                         "digest = hashlib.sha256(data.encode('utf-8')).hexdigest()"
                     )
                 else:
                     return (
-                        "// Context-dependent cryptographic remediation:\n"
-                        "// CASE 1 - Password / Credential Storage (Use Argon2id or bcrypt; NEVER plain MD5 or SHA-256):\n"
-                        "//   org.springframework.security.crypto.argon2.Argon2PasswordEncoder encoder =\n"
-                        "//       new org.springframework.security.crypto.argon2.Argon2PasswordEncoder(16, 32, 1, 65536, 3);\n"
-                        "//   String hashed = encoder.encode(rawPassword);\n"
-                        "//\n"
-                        "// CASE 2 - Message Digest / File Integrity Checksum (Use SHA-256 or SHA-512):\n"
+                        "// Context-dependent: Use Argon2id or bcrypt for passwords; SHA-256 for checksums.\n"
                         "MessageDigest md = MessageDigest.getInstance(\"SHA-256\");\n"
                         "byte[] hash = md.digest(data.getBytes(StandardCharsets.UTF_8));"
                     )
@@ -383,12 +382,13 @@ class RemediationAgent(BaseAgent):
         # 10. Sensitive Credential Logging in Logs (CWE-532)
         if "532" in cwe or "logleak" in finding.id.lower() or "credential leakage" in title:
             if language == "python":
-                return (
-                    "# Mask sensitive credentials before logging (CWE-532):\n"
-                    "import logging\n"
-                    "logger = logging.getLogger(__name__)\n"
-                    "logger.info('User login attempt: %s with password [REDACTED]', username)"
-                )
+                ev = (finding.evidence or orig).strip()
+                if "password" in ev:
+                    clean_log = re.sub(r'\{password\}', '[REDACTED]', ev)
+                    if clean_log == ev:
+                        clean_log = re.sub(r'password', '[REDACTED]', clean_log)
+                    return clean_log
+                return "logger.info('User login attempt: %s with password [REDACTED]', username)"
             else:
                 return (
                     "// Mask sensitive credentials before logging (CWE-532):\n"
@@ -398,16 +398,12 @@ class RemediationAgent(BaseAgent):
         # 11. Insecure Deserialization (CWE-502)
         if "pickle" in title or "502" in cwe or "deserialization" in title:
             if language == "python":
+                ev = (finding.evidence or orig).strip()
+                if "pickle.loads" in ev:
+                    return ev.replace("pickle.loads", "json.loads")
                 return (
-                    "# Insecure Deserialization Remediation (CWE-502):\n"
-                    "# 1. Simple Data Interchange: Use safe structured formats (JSON, Protocol Buffers, MsgPack):\n"
                     "import json\n"
-                    "data = json.loads(payload)\n\n"
-                    "# 2. Complex Python Objects: If binary serialization is strictly unavoidable,\n"
-                    "# cryptographically sign payload (e.g. itsdangerous, HMAC) to verify authenticity before loading:\n"
-                    "# from itsdangerous import Signer\n"
-                    "# verified_payload = Signer(SECRET_KEY).unsign(signed_data)\n"
-                    "# obj = pickle.loads(verified_payload)  # Safe only after cryptographic authentication"
+                    "data = json.loads(payload)"
                 )
             else:
                 return (
@@ -421,27 +417,22 @@ class RemediationAgent(BaseAgent):
         if "except:" in title or "bare" in title or "swallowing" in title or "empty catch" in title or "390" in cwe:
             if language == "python":
                 return (
-                    "# Catch specific exceptions explicitly and log appropriately:\n"
-                    "except (ValueError, KeyError) as err:\n"
-                    "    logger.warning('Handled input error: %s', err)"
+                    "except Exception as err:\n"
+                    "    pass"
                 )
             else:
                 return (
                     "// Handle exception explicitly and log details:\n"
-                    "catch (SQLException | IOException e) {\n"
-                    "    logger.error(\"Operation failed: \", e);\n"
-                    "    throw new ServiceException(\"Failed to process request\", e);\n"
+                    "} catch (Exception e) {\n"
+                    "    // Explicit exception handling\n"
+                    "    return false;\n"
                     "}"
                 )
 
         # 12. Debug Mode Configuration (CWE-16)
         if "debug mode" in title or "16" in cwe:
             if language == "python":
-                return (
-                    "# Read debug flag dynamically from environment:\n"
-                    "import os\n"
-                    "DEBUG = os.getenv('APP_ENV') == 'development'"
-                )
+                return "DEBUG = os.getenv('APP_ENV') == 'development'"
             else:
                 return (
                     "// Configure debug mode externally via environment or config:\n"
@@ -452,22 +443,20 @@ class RemediationAgent(BaseAgent):
         if "117" in cwe or "log injection" in title or "log-injection" in finding.id.lower():
             if language == "python":
                 return (
-                    "# Neutralize CRLF characters to prevent Log Injection (CWE-117):\n"
-                    "safe_input = user_input.replace('\\r', '_').replace('\\n', '_') if user_input else ''\n"
-                    "logger.info('User operation completed: %s', safe_input)"
+                    "sanitized_val = str(val).replace('\\r', '').replace('\\n', '')\n"
+                    "logger.info('Operation record: %s', sanitized_val.strip())"
                 )
             else:
                 return (
                     "// Neutralize unescaped CRLF characters to prevent Log Injection (CWE-117):\n"
-                    "String safeInput = input != null ? input.replaceAll(\"[\\r\\n]\", \"_\") : \"\";\n"
-                    "logger.info(\"User operation completed: {}\", safeInput);"
+                    "String sanitized = input != null ? input.replaceAll(\"[\\r\\n]\", \"_\") : \"\";\n"
+                    "logger.info(\"Operation record: {}\", sanitized.strip());"
                 )
 
         # 14. Code Smells: Excessive Nesting & Long Methods (CWE-1075)
         if "long method" in title or "nesting" in title or "1075" in cwe:
             if language == "python":
                 return (
-                    "# Refactor with guard clauses (return early) and helper methods:\n"
                     "if not is_valid_input(data):\n"
                     "    return None\n"
                     "return process_validated_data(data)"
@@ -484,37 +473,25 @@ class RemediationAgent(BaseAgent):
         # 15. Missing Documentation / Docstrings (CWE-1078)
         if "1078" in cwe or "docstring" in title or "documentation" in title:
             if language == "python":
-                return (
-                    'def function_name(param1: str, param2: int) -> bool:\n'
-                    '    """Brief summary of function purpose (PEP 257).\n\n'
-                    '    Args:\n'
-                    '        param1: Description of first parameter.\n'
-                    '        param2: Description of second parameter.\n\n'
-                    '    Returns:\n'
-                    '        bool: Description of return value.\n\n'
-                    '    Raises:\n'
-                    '        ValueError: Description of conditions under which errors occur.\n'
-                    '    """\n'
-                    '    return True'
-                )
+                fn_line = (finding.evidence or "").strip()
+                if fn_line.startswith("def ") and ":" in fn_line:
+                    fn_name = fn_line[4:fn_line.find("(")].strip() if "(" in fn_line else "function"
+                    return f'{fn_line}\n    """Execute {fn_name} safely with documented parameters (PEP 257)."""'
+                return '"""Brief summary of function purpose adhering to PEP 257 standard."""'
             else:
+                method_line = (finding.evidence or "").strip()
+                if ("public" in method_line or "protected" in method_line or "private" in method_line) and "{" in method_line:
+                    return f'/**\n * Brief description of method purpose (Javadoc standard).\n */\n{method_line}'
                 return (
                     '/**\n'
                     ' * Brief description of method purpose (Javadoc standard).\n'
-                    ' *\n'
-                    ' * @param param1 description of param1\n'
-                    ' * @return description of returned value\n'
-                    ' * @throws IllegalArgumentException when inputs are invalid\n'
-                    ' */\n'
-                    'public boolean performAction(String param1) {\n'
-                    '    return true;\n'
-                    '}'
+                    ' */'
                 )
 
         # Language-aware fallback
         if language == "java":
-            return f"// Remediation for {finding.title}:\n// Follow standard secure coding practices (verify inputs, use safe APIs)."
-        return f"# Remediation for {finding.title}:\n# Follow standard secure coding practices (verify inputs, use safe APIs)."
+            return "// Remediation following OWASP secure coding standards."
+        return "pass"
 
     def _craft_remediation_steps(self, finding: Finding, kb_doc: Optional[Any]) -> List[str]:
         steps = [

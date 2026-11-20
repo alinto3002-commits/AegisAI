@@ -43,45 +43,15 @@
           </svg>
           Review Studio
         </button>
-        <button id="nav-btn-pr" class="nav-btn" onclick="openPrSummaryTab()">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <circle cx="18" cy="18" r="3" />
-            <circle cx="6" cy="6" r="3" />
-            <path d="M13 6h3a2 2 0 0 1 2 2v7" />
-            <line x1="6" y1="9" x2="6" y2="21" />
-          </svg>
-          PR Summary Agent
-        </button>
         <button id="nav-btn-assistant" class="nav-btn" onclick="switchMainTab('chat')">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
           Code Assistant
         </button>
-        <button id="nav-btn-kb" class="nav-btn" onclick="switchMainTab('kb')">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          </svg>
-          Knowledge Base
-        </button>
       </nav>
     </div>
   </header>
-
-  <!-- Milestone 3 Architecture Banner -->
-  <div class="milestone-banner">
-    <div class="milestone-badge">MILESTONE 3 LIVE</div>
-    <div class="milestone-items">
-      <span class="m3-item" onclick="switchMainTab('review')"><strong>1. Remediation Agent</strong> (Diffs, Fixes & Unit Tests)</span>
-      <span class="m3-dot">•</span>
-      <span class="m3-item" onclick="openPrSummaryTab()"><strong>2. PR Summary Agent</strong> (Executive Review & Roadmap)</span>
-      <span class="m3-dot">•</span>
-      <span class="m3-item" onclick="switchMainTab('review')"><strong>3. Findings Display Module</strong> (Score & Severity Portal)</span>
-      <span class="m3-dot">•</span>
-      <span class="m3-item" onclick="switchMainTab('chat')"><strong>4. Conversational Code Assistant</strong> (RAG Q&A)</span>
-    </div>
-  </div>
 
   <!-- Main View Container -->
   <main class="app-main">
@@ -108,15 +78,6 @@
                 <span id="detected-lang-name" class="auto-lang-value">Python</span>
               </div>
             </div>
-          </div>
-
-          <!-- Quick Load Sample Bar -->
-          <div class="sample-loader-bar">
-            <span class="sample-bar-label">Load Preset:</span>
-            <button class="sample-chip" onclick="loadSampleFile('python_vulnerable_sqli_secrets')" title="Load Python SQL Injection, Weak MD5, Hardcoded Credentials">🐍 Py Vulnerable</button>
-            <button class="sample-chip" onclick="loadSampleFile('java_VulnerableAuthApp')" title="Load Java Path Traversal, Hardcoded Key, Weak PRNG">☕ Java Vulnerable</button>
-            <button class="sample-chip" onclick="loadSampleFile('python_secure_sample')" title="Load Secure Python Implementation (Argon2id, Parameterized SQL)">🛡️ Py Secure</button>
-            <button class="sample-chip" onclick="loadSampleFile('java_SecureAuthApp')" title="Load Secure Java Implementation (PreparedStatement, SecureRandom)">🛡️ Java Secure</button>
           </div>
 
           <!-- File Upload Drop Zone -->

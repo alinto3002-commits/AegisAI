@@ -24,13 +24,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupCodeEditorStats();
   await loadKnowledgeBaseStats();
   updateEditorStats();
-
-  // Milestone 3: Auto-load default sample on initial visit so all 4 modules are immediately visible
-  const editor = document.getElementById('code-input');
-  if (editor && (!editor.value || !editor.value.trim())) {
-    await loadSampleFile('python_vulnerable_sqli_secrets');
-    await triggerMultiAgentReview();
-  }
 });
 
 // Setup line counter & live auto-identification on typing, paste, and change
@@ -171,14 +164,31 @@ function clearEditor() {
   if (editor) {
     editor.value = '';
     currentUploadedFilename = null;
+    currentReport = null;
     const fileEl = document.getElementById('editor-filename');
     if (fileEl) fileEl.textContent = 'main.py';
     updateEditorStats();
+
+    // Reset findings dashboard and syntax box
+    const dashboard = document.getElementById('findings-dashboard');
+    if (dashboard) dashboard.classList.add('hidden');
+    const placeholder = document.getElementById('findings-placeholder');
+    if (placeholder) placeholder.classList.remove('hidden');
+    const stepper = document.getElementById('agent-stepper');
+    if (stepper) stepper.classList.add('hidden');
+    const syntaxBox = document.getElementById('syntax-status-box');
+    if (syntaxBox) {
+      syntaxBox.className = 'syntax-box';
+      syntaxBox.innerHTML = '<span>Ready for syntax validation</span>';
+    }
+    const exportGroup = document.getElementById('export-group');
+    if (exportGroup) exportGroup.classList.add('hidden');
+
     showToast('Editor cleared', 'info');
   }
 }
 
-// Switch between Review, KB, and Chat tabs
+// Switch between Review, KB, Chat, and Docs tabs
 function switchMainTab(tab) {
   document.querySelectorAll('.view-tab').forEach(el => {
     el.classList.remove('active');
@@ -201,6 +211,11 @@ function switchMainTab(tab) {
     const el = document.getElementById('tab-chat');
     if (el) { el.classList.add('active'); el.classList.remove('hidden'); }
     const btn = document.getElementById('nav-btn-assistant');
+    if (btn) btn.classList.add('active');
+  } else if (tab === 'docs') {
+    const el = document.getElementById('tab-docs');
+    if (el) { el.classList.add('active'); el.classList.remove('hidden'); }
+    const btn = document.getElementById('nav-btn-docs');
     if (btn) btn.classList.add('active');
   }
 }
@@ -239,6 +254,11 @@ function handleFileUpload(event) {
 async function triggerSyntaxCheck() {
   const code = document.getElementById('code-input').value;
   const statusBox = document.getElementById('syntax-status-box');
+  if (!code || !code.trim()) {
+    statusBox.className = 'syntax-box';
+    statusBox.innerHTML = '<span>Please enter or upload code first.</span>';
+    return;
+  }
   statusBox.className = 'syntax-box';
   statusBox.innerHTML = '<span>Validating AST syntax...</span>';
 
@@ -386,6 +406,14 @@ async function loadSampleFile(sampleKey) {
     console.error('Error loading sample:', err);
     showToast('Failed to load sample: ' + err.message, 'error');
   }
+}
+
+// Multi-Tier Demonstration Helper: Loads sample and immediately triggers multi-agent review
+async function loadSampleAndAnalyze(sampleKey) {
+  switchMainTab('review');
+  await loadSampleFile(sampleKey);
+  showToast(`Running automated multi-agent code review on ${sampleKey}...`, 'info');
+  await triggerMultiAgentReview();
 }
 
 // Module 4: Render Findings and Scores
@@ -546,7 +574,7 @@ function filterFindings(filter) {
       const escapedEvidence = escapeHtml(f.evidence || '');
       const rawDiff = f.remediation.diff || '';
       const testCode = f.remediation.unit_test_code ? escapeHtml(f.remediation.unit_test_code) : '';
-      
+
       const testSectionHtml = testCode ? `
         <div id="test-box-${f.id}" class="test-preview-box hidden" style="margin-top: 0.65rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.75rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
@@ -662,42 +690,94 @@ function renderDiffLinesHtml(diffText) {
 function applyFixToEditor(findingId) {
   if (!currentReport || !currentReport.findings) return;
   const finding = currentReport.findings.find(f => f.id === findingId);
-  if (!finding || !finding.remediation || !finding.remediation.corrected_snippet) return;
+  if (!finding || !finding.remediation || finding.remediation.corrected_snippet === undefined || finding.remediation.corrected_snippet === null) return;
 
   const editor = document.getElementById('code-input');
   if (!editor) return;
 
-  let currentCode = editor.value;
-  let applied = false;
-  const corrected = finding.remediation.corrected_snippet.trim();
+  const lines = editor.value.split('\n');
+  const rawSnippet = (finding.remediation.corrected_snippet || '').replace(/^[\r\n]+|[\r\n]+$/g, '');
 
-  // Strategy 1: Replace exact evidence match
-  if (finding.evidence && finding.evidence.trim() && currentCode.includes(finding.evidence.trim())) {
-    currentCode = currentCode.replace(finding.evidence.trim(), corrected);
-    applied = true;
+  // Strip all comments (#, //, /*, *, */) so NO comments are added to code editor
+  const nonCommentLines = rawSnippet.split('\n').filter(line => {
+    const t = line.trim();
+    return !t.startsWith('#') &&
+           !t.startsWith('//') &&
+           !t.startsWith('/*') &&
+           !t.startsWith('*') &&
+           !t.startsWith('*/');
+  });
+  let corrected = (nonCommentLines.length > 0 ? nonCommentLines.join('\n') : rawSnippet).replace(/^[\r\n]+|[\r\n]+$/g, '');
+
+  const rawEv = (finding.evidence || '').trim();
+  const rawOrig = (finding.remediation.original_snippet || '').trim();
+
+  // Find target line index
+  let targetIdx = -1;
+  if (rawEv) {
+    if (rawEv.includes('********') && rawEv.includes('=')) {
+      const varPart = rawEv.split('=')[0].trim();
+      targetIdx = lines.findIndex(l => l.includes(varPart));
+    }
+    if (targetIdx === -1) {
+      targetIdx = lines.findIndex(l => l.includes(rawEv));
+    }
+    if (targetIdx === -1) {
+      targetIdx = lines.findIndex(l => l.trim() === rawEv || l.trim().startsWith(rawEv));
+    }
   }
-  // Strategy 2: Match original_snippet
-  else if (finding.remediation.original_snippet && currentCode.includes(finding.remediation.original_snippet.trim())) {
-    currentCode = currentCode.replace(finding.remediation.original_snippet.trim(), corrected);
-    applied = true;
+  if (targetIdx === -1 && rawOrig) {
+    targetIdx = lines.findIndex(l => l.includes(rawOrig) || l.trim() === rawOrig);
   }
-  // Strategy 3: Target line replacement
-  else if (finding.line_start) {
-    const lines = currentCode.split('\n');
-    const targetIdx = finding.line_start - 1;
-    if (targetIdx >= 0 && targetIdx < lines.length) {
-      const indent = (lines[targetIdx].match(/^\s*/) || [''])[0];
-      const indentedReplacement = corrected.split('\n').map(l => (l.startsWith(' ') || l.startsWith('\t')) ? l : (indent + l)).join('\n');
-      lines[targetIdx] = indentedReplacement;
-      currentCode = lines.join('\n');
-      applied = true;
+  if (targetIdx === -1 && finding.line_start) {
+    const desired = finding.line_start - 1;
+    if (desired >= 0 && desired < lines.length) {
+      targetIdx = desired;
     }
   }
 
-  if (applied) {
-    editor.value = currentCode;
+  if (targetIdx >= 0) {
+    let formattedReplacement;
+
+    if (finding.id && finding.id.startsWith('SYNTAX')) {
+      // Syntax error remediation has exact indentation calculated from AST analysis
+      formattedReplacement = corrected;
+    } else {
+      // Preserve the exact indentation of the original code line
+      const baseIndent = (lines[targetIdx].match(/^\s*/) || [''])[0];
+
+      // Ensure delimiter balance if replacing a line starting with closing brace (e.g. '} catch')
+      if (lines[targetIdx].trim().startsWith('}') && !corrected.startsWith('}')) {
+        corrected = '} ' + corrected;
+      }
+
+      const corrLines = corrected.split('\n');
+      
+      // Compute minimum indent in candidate snippet to preserve relative indents
+      const nonEmptyIndents = corrLines
+        .filter(l => l.trim().length > 0)
+        .map(l => (l.match(/^\s*/)[0]).length);
+      const minIndent = nonEmptyIndents.length ? Math.min(...nonEmptyIndents) : 0;
+
+      formattedReplacement = corrLines.map(l => {
+        if (!l.trim()) return '';
+        const relIndent = l.slice(minIndent);
+        return baseIndent + relIndent;
+      }).join('\n');
+    }
+
+    const span = (finding.line_end && finding.line_end >= finding.line_start)
+      ? (finding.line_end - finding.line_start + 1)
+      : 1;
+
+    if (!corrected) {
+      showToast(`No modification required for "${finding.title}".`, 'info');
+      return;
+    }
+    lines.splice(targetIdx, span, formattedReplacement);
+    editor.value = lines.join('\n');
     updateEditorStats();
-    showToast(`⚡ Remediated "${finding.title}" at line ${finding.line_start}! Click "Run Code Review" to verify health score.`, 'success');
+    showToast(`⚡ Remediated "${finding.title}"! Re-evaluating health score...`, 'success');
 
     const btn = document.getElementById(`apply-btn-${findingId}`);
     if (btn) {
@@ -705,8 +785,13 @@ function applyFixToEditor(findingId) {
       btn.classList.add('applied');
       btn.disabled = true;
     }
+
+    // Automatically trigger review so finding card clears and health score updates
+    setTimeout(() => {
+      triggerMultiAgentReview();
+    }, 350);
   } else {
-    showToast(`Unable to auto-apply patch. Use "Copy Fix" to apply manually.`, 'error');
+    showToast(`Unable to auto-locate target line. Use "Copy Fix" to apply manually.`, 'error');
   }
 }
 

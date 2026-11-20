@@ -1,6 +1,7 @@
 import uuid
 import logging
 import time
+import re
 import concurrent.futures
 from typing import Dict, Any, List
 
@@ -84,6 +85,77 @@ class MultiAgentOrchestrator:
                     "}\n"
                 )
 
+            # Try Gemini AI first to accurately fix spelling mistakes and syntax errors
+            gemini_fix = None
+            try:
+                from backend.modules.gemini_fixer import correct_code_line_with_gemini
+                context_snippet = "\n".join(lines[max(0, err_line - 5):min(len(lines), err_line + 5)])
+                gemini_fix = correct_code_line_with_gemini(
+                    faulty_line=faulty_line,
+                    context_lines=context_snippet,
+                    language=validation.language,
+                    error_msg=validation.error_message
+                )
+            except Exception as e:
+                logger.debug(f"Gemini syntax correction fallback: {e}")
+
+            if gemini_fix and gemini_fix.strip():
+                safe_corrected = gemini_fix
+            else:
+                # Safely and cleanly remediate syntax errors with local heuristics (fallback)
+                line_clean = faulty_line.strip()
+                if validation.language == "python":
+                    # Fix misspelled keywords (e.g. 'impot' -> 'import')
+                    line_clean = re.sub(r'^(?:impot|imprt|improt|imporrt|importt|impor|imort|inport|iimport|mport)\b', 'import', line_clean)
+                    line_clean = re.sub(r'\b(?:impot|imprt|improt|imporrt|importt|impor|imort|inport|iimport|mport)\b', 'import', line_clean)
+                    line_clean = re.sub(r'^(?:form|fron|fromm)\b', 'from', line_clean)
+                    line_clean = re.sub(r'^(?:deff|dfe|ddef|def_)\b', 'def', line_clean)
+                    line_clean = re.sub(r'^(?:clss|clas|calss)\b', 'class', line_clean)
+                    line_clean = re.sub(r'\b(?:retrun|retun|reutrn|retunr)\b', 'return', line_clean)
+                    line_clean = re.sub(r'^(?:whlie|wile|whil)\b', 'while', line_clean)
+                    line_clean = re.sub(r'^(?:excep|excpt|exceept)\b', 'except', line_clean)
+                    line_clean = re.sub(r'^(?:esle)\b', 'else', line_clean)
+                    line_clean = re.sub(r'^(?:eilf|eliff)\b', 'elif', line_clean)
+
+                    if line_clean.startswith('"""') or line_clean.startswith("'''"):
+                        q = '"""' if line_clean.startswith('"""') else "'''"
+                        content = line_clean.lstrip('"\'').rstrip('"\':; ')
+                        line_clean = f"{q}{content}{q}"
+                    elif re.search(r'[:;]+$', line_clean) and not any(line_clean.startswith(kw) for kw in ['def ', 'class ', 'if ', 'elif ', 'else', 'try', 'except', 'finally', 'while ', 'for ', 'with ']):
+                        line_clean = re.sub(r'[:;]+$', '', line_clean).strip()
+                    elif any(line_clean.startswith(kw) for kw in ['def ', 'class ', 'if ', 'elif ', 'else', 'try', 'except', 'finally', 'while ', 'for ', 'with ']):
+                        if not line_clean.endswith(':'):
+                            line_clean = line_clean.rstrip(';') + ':'
+
+                    target_indent = ""
+                    for i in range(err_line - 2, -1, -1):
+                        if i < len(lines) and lines[i].strip():
+                            prev = lines[i]
+                            prev_indent = re.match(r'^\s*', prev).group(0)
+                            if prev.strip().endswith(':'):
+                                target_indent = prev_indent + '    '
+                            else:
+                                target_indent = prev_indent
+                            break
+                    safe_corrected = target_indent + line_clean
+                else:
+                    # Fix misspelled keywords in Java
+                    line_clean = re.sub(r'^(?:impot|imprt|improt|imporrt|importt|impor|imort|inport|iimport|mport)\b', 'import', line_clean)
+                    line_clean = re.sub(r'\b(?:pulbic|pubic|publc)\b', 'public', line_clean)
+                    line_clean = re.sub(r'\b(?:statc|staitc|satatic)\b', 'static', line_clean)
+                    line_clean = re.sub(r'\b(?:viod|vod)\b', 'void', line_clean)
+                    line_clean = re.sub(r'\b(?:calss|clas)\b', 'class', line_clean)
+                    line_clean = re.sub(r'\b(?:retrun|retun|reutrn)\b', 'return', line_clean)
+
+                    if not line_clean.endswith(';') and not line_clean.endswith('{') and not line_clean.endswith('}') and not line_clean.startswith('//') and not line_clean.startswith('/*') and not line_clean.startswith('*'):
+                        line_clean += ';'
+                    target_indent = ""
+                    for i in range(err_line - 2, -1, -1):
+                        if i < len(lines) and lines[i].strip():
+                            target_indent = re.match(r'^\s*', lines[i]).group(0)
+                            break
+                    safe_corrected = target_indent + line_clean
+
             syntax_finding = Finding(
                 id=f"SYNTAX-ERR-{err_line}",
                 agent_type=AgentType.CODE_ANALYSIS,
@@ -106,10 +178,7 @@ class MultiAgentOrchestrator:
                         "Ensure balanced parentheses, braces, quotes, and valid language grammar."
                     ),
                     original_snippet=faulty_line if faulty_line else validation.error_message,
-                    corrected_snippet=(
-                        f"# Ensure valid {validation.language.title()} syntax at line {err_line}:\n"
-                        + (faulty_line + (":" if validation.language == "python" and not faulty_line.rstrip().endswith(":") else ";") if faulty_line else "")
-                    ),
+                    corrected_snippet=safe_corrected,
                     diff=(
                         f"--- {validation.filename} (Original Syntax Error)\n"
                         f"+++ {validation.filename} (Corrected Syntax)\n"

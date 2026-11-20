@@ -359,6 +359,11 @@ class SecurityVulnerabilityAgent(BaseAgent):
         for idx, line in enumerate(lines, start=1):
             # 1. SQL Injection via raw f-string or % or string concatenation
             if re.search(r"(execute|cursor\.execute|raw_query|rawQuery|\bquery|\bsql|\bstmt)\s*(\(|=)\s*f[\"'].*?(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER).*?\{.*?\}", line, re.I):
+                end_idx = idx
+                ev_text = line.strip()
+                if idx < len(lines) and re.search(r"(?:cursor|conn|db)\.execute\s*\(\s*(?:query|sql|stmt)\s*\)", lines[idx]):
+                    end_idx = idx + 1
+                    ev_text = line.strip() + "\n" + lines[idx].strip()
                 findings.append(
                     Finding(
                         id=f"SEC-A05-SQLI-FSTRING-{idx}",
@@ -368,10 +373,10 @@ class SecurityVulnerabilityAgent(BaseAgent):
                         description="Dynamic SQL query built using f-string interpolation allows attackers to manipulate query structure and execute arbitrary SQL commands (CWE-89).",
                         severity=FindingSeverity.CRITICAL,
                         line_start=idx,
-                        line_end=idx,
+                        line_end=end_idx,
                         cwe_id="CWE-89",
                         owasp_category="A05:2025 - Injection",
-                        evidence=line.strip(),
+                        evidence=ev_text,
                     )
                 )
             elif re.search(r"(execute|cursor\.execute|\bquery|\bsql)\s*(\(|=)\s*[\"'].*?(SELECT|INSERT|UPDATE|DELETE).*?['\"]\s*%", line, re.I):
@@ -629,6 +634,9 @@ class SecurityVulnerabilityAgent(BaseAgent):
         for idx, line in enumerate(lines, start=1):
             # 1. Sensitive Data / Credential Leakage in Logs (CWE-532)
             if re.search(r"(?:(?:logger|logging|LOGGER|log|System\.out)\.(?:info|debug|warn|warning|error|trace|fatal|print|println)?|\bprint)\s*\([^)]*(password|passwd|pwd|secret|token|api_key|apiKey)", line, re.I):
+                # Ignore explicitly redacted or masked log entries
+                if re.search(r"\[REDACTED\]|\[MASKED\]|REDACTED|\*{3,}", line, re.I):
+                    continue
                 findings.append(
                     Finding(
                         id=f"SEC-A09-LOGLEAK-{idx}",
@@ -692,6 +700,7 @@ class SecurityVulnerabilityAgent(BaseAgent):
             # Empty catch in Java (both single-line and multi-line)
             if language == "java" and re.search(r"catch\s*\([^)]+\)\s*\{", line):
                 is_empty = False
+                end_idx = idx
                 if re.search(r"catch\s*\([^)]+\)\s*\{\s*\}", line):
                     is_empty = True
                 else:
@@ -701,8 +710,10 @@ class SecurityVulnerabilityAgent(BaseAgent):
                             continue
                         if nl.startswith("}"):
                             is_empty = True
+                            end_idx = nxt
                         break
                 if is_empty:
+                    block_evidence = "\n".join(lines[idx - 1:end_idx]).strip()
                     findings.append(
                         Finding(
                             id=f"SEC-A10-JAVA-EMPTYCATCH-{idx}",
@@ -712,10 +723,10 @@ class SecurityVulnerabilityAgent(BaseAgent):
                             description="Empty catch block in Java suppresses errors and causes silent security failures (CWE-390).",
                             severity=FindingSeverity.MEDIUM,
                             line_start=idx,
-                            line_end=idx,
+                            line_end=end_idx,
                             cwe_id="CWE-390",
                             owasp_category="A10:2025 - Mishandling of Exceptional Conditions",
-                            evidence=line.strip(),
+                            evidence=block_evidence,
                         )
                     )
         return findings
