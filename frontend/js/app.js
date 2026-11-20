@@ -466,6 +466,9 @@ function renderReviewReport(report) {
     runtimeText.textContent = `Security Agent and Code Analysis Agent ran in parallel · ${parallelTime} s`;
   }
 
+  // Render Mini Audit Findings Graph & Risk Profile
+  renderAuditFindingsGraph(report);
+
   // Render Telemetry Details Tab
   renderDetailsTab(report);
 
@@ -928,6 +931,126 @@ function copyPrSummaryText() {
   if (!currentReport || !currentReport.pr_summary) return;
   navigator.clipboard.writeText(currentReport.pr_summary.summary_markdown);
   showToast('Copied full PR Summary Markdown to clipboard!', 'success');
+}
+
+// Module 4: Render Mini Audit Findings Graph & Risk Profile
+function renderAuditFindingsGraph(report) {
+  const container = document.getElementById('findings-graph-card');
+  if (!container) return;
+
+  const findings = (report && report.findings) ? report.findings : [];
+  const total = findings.length;
+  const sevs = (report && report.severity_counts) ? report.severity_counts : {};
+  const crit = sevs.CRITICAL || 0;
+  const high = sevs.HIGH || 0;
+  const med = sevs.MEDIUM || 0;
+  const low = sevs.LOW || 0;
+  const info = sevs.INFO || 0;
+
+  // Update badge
+  const badge = document.getElementById('graph-summary-badge');
+  if (badge) {
+    if (total === 0) {
+      badge.textContent = '✓ Clean · Zero Issues';
+      badge.className = 'findings-graph-badge clean';
+    } else if (crit > 0) {
+      badge.textContent = `${total} Issue${total === 1 ? '' : 's'} · Action Required`;
+      badge.className = 'findings-graph-badge critical';
+    } else {
+      badge.textContent = `${total} Issue${total === 1 ? '' : 's'} Detected`;
+      badge.className = 'findings-graph-badge warn';
+    }
+  }
+
+  const donutTotal = document.getElementById('donut-total-count');
+  if (donutTotal) donutTotal.textContent = total;
+
+  const donutSub = document.querySelector('.donut-center-text .donut-sub');
+  if (donutSub) donutSub.textContent = total === 0 ? 'Clean' : (total === 1 ? 'Issue' : 'Issues');
+
+  // Build SVG Donut slices
+  const svg = document.getElementById('findings-donut-svg');
+  if (svg) {
+    if (total === 0) {
+      svg.innerHTML = `
+        <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#166534" stroke-width="4.8" stroke-dasharray="100 0" stroke-dashoffset="0"></circle>
+      `;
+    } else {
+      const items = [
+        { name: 'CRITICAL', count: crit, color: '#8b1e2b' },
+        { name: 'HIGH', count: high, color: '#c2410c' },
+        { name: 'MEDIUM', count: med, color: '#b45309' },
+        { name: 'LOW', count: low, color: '#2563eb' },
+        { name: 'INFO', count: info, color: '#64748b' },
+      ];
+      let offset = 0;
+      let circlesHtml = `
+        <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#f1ede4" stroke-width="4.8"></circle>
+      `;
+      items.forEach(item => {
+        if (item.count > 0) {
+          const pct = (item.count / total) * 100;
+          const dashArray = `${pct} ${100 - pct}`;
+          circlesHtml += `
+            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent"
+              stroke="${item.color}" stroke-width="4.8"
+              stroke-dasharray="${dashArray}"
+              stroke-dashoffset="${-offset}"
+              class="donut-segment"
+              transform="rotate(-90 21 21)"
+              onclick="filterFindings('${item.name}')"
+              style="cursor: pointer;">
+              <title>${item.name}: ${item.count} (${Math.round(pct)}%) - Click to filter</title>
+            </circle>
+          `;
+          offset += pct;
+        }
+      });
+      svg.innerHTML = circlesHtml;
+    }
+  }
+
+  // Build Bars Column
+  const barsCol = document.getElementById('graph-bars-column');
+  if (barsCol) {
+    if (total === 0) {
+      barsCol.innerHTML = `
+        <div class="graph-clean-notice">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <span>All checks passed! No security vulnerabilities or quality smells detected.</span>
+        </div>
+      `;
+    } else {
+      const bars = [
+        { name: 'Critical', key: 'CRITICAL', count: crit, color: '#8b1e2b' },
+        { name: 'High', key: 'HIGH', count: high, color: '#c2410c' },
+        { name: 'Medium', key: 'MEDIUM', count: med, color: '#b45309' },
+        { name: 'Low', key: 'LOW', count: low, color: '#2563eb' },
+        { name: 'Info / Smells', key: 'INFO', count: info, color: '#64748b' },
+      ];
+      barsCol.innerHTML = bars.map(b => {
+        const pct = total > 0 ? Math.round((b.count / total) * 100) : 0;
+        return `
+          <div class="graph-bar-row" onclick="filterFindings('${b.key}')" title="Filter by ${b.name}">
+            <div class="bar-label-wrap">
+              <span class="bar-dot" style="background: ${b.color};"></span>
+              <span class="bar-name">${b.name}</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: ${pct}%; background: ${b.color};"></div>
+            </div>
+            <div class="bar-count-wrap">
+              <span class="bar-num">${b.count}</span>
+              <span class="bar-pct">(${pct}%)</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
 }
 
 function discussFindingWithAssistant(findingId) {

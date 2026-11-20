@@ -12,7 +12,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400;1,600&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=light_classic_v3">
+  <link rel="stylesheet" href="/static/css/style.css?v=light_classic_v9">
 </head>
 
 <body class="vintage-theme">
@@ -247,6 +247,35 @@
               <span id="parallel-runtime-text">Security Agent and Code Analysis Agent ran in parallel</span>
             </div>
 
+            <!-- Audit Findings Distribution Graph Card -->
+            <div id="findings-graph-card" class="findings-graph-card">
+              <div class="findings-graph-header">
+                <div class="graph-title-wrap">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10" />
+                    <line x1="12" y1="20" x2="12" y2="4" />
+                    <line x1="6" y1="20" x2="6" y2="14" />
+                  </svg>
+                  <span class="findings-graph-title">Risk Profile & Findings Breakdown</span>
+                </div>
+                <div class="findings-graph-badge" id="graph-summary-badge">0 Issues Detected</div>
+              </div>
+              <div class="findings-graph-body">
+                <div class="donut-chart-container">
+                  <div class="donut-chart-box">
+                    <svg class="donut-svg" viewBox="0 0 42 42" id="findings-donut-svg">
+                      <circle class="donut-ring" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#f1ede4" stroke-width="4.8"></circle>
+                    </svg>
+                    <div class="donut-center-text">
+                      <span class="donut-total" id="donut-total-count">0</span>
+                      <span class="donut-sub">Issues</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="graph-bars-column" id="graph-bars-column"></div>
+              </div>
+            </div>
+
             <!-- Findings Filter Tabs -->
             <div class="findings-filter-bar">
               <button class="filter-btn active" id="tab-btn-all" onclick="filterFindings('ALL')">All Findings (<span id="count-all">0</span>)</button>
@@ -354,7 +383,7 @@
   <!-- Notification Toast Container -->
   <div id="toast-container" class="toast-container"></div>
 
-  <script src="/static/js/app.js?v=8"></script>
+  <script src="/static/js/app.js?v=9"></script>
 </body>
 
 </html>
