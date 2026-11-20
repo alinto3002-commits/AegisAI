@@ -34,11 +34,11 @@ class ConversationalCodeAssistant(BaseAgent):
 
         # Priority order of supported models on Google API
         models_to_try = [
-            "gemini-3.8-flash",
-            "gemini-3-flash-preview",
+            "gemini-3.5-flash-lite",
+            "gemini-3.5-flash",
             "gemini-flash-latest",
-            "gemini-2.5-flash-lite",
-            "gemini-pro-latest",
+            "gemini-flash-lite-latest",
+            "gemini-3.8-flash",
         ]
         for model in models_to_try:
             try:
@@ -53,7 +53,7 @@ class ConversationalCodeAssistant(BaseAgent):
                     data=payload,
                     headers={"Content-Type": "application/json"},
                 )
-                with urllib.request.urlopen(req, timeout=4) as response:
+                with urllib.request.urlopen(req, timeout=8) as response:
                     if response.status == 200:
                         data = json.loads(response.read().decode("utf-8"))
                         candidates = data.get("candidates", [])
@@ -64,7 +64,7 @@ class ConversationalCodeAssistant(BaseAgent):
             except Exception as e:
                 err_str = str(e).lower()
                 logger.info(f"Gemini API attempt with {model} failed: {e}. Trying fallback.")
-                if "no such host" in err_str or "getaddrinfo failed" in err_str or "10054" in err_str or "timed out" in err_str:
+                if "no such host" in err_str or "getaddrinfo failed" in err_str:
                     break
                 continue
         return None
