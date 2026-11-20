@@ -1137,6 +1137,15 @@ async function sendChatMessage() {
   const code = document.getElementById('code-input').value;
   const findings = currentReport ? currentReport.findings : null;
 
+  // Detect if the user explicitly asks about a language in their query
+  const qLower = query.toLowerCase();
+  let chatLanguage = currentLanguage;
+  if (/\bjava\b/.test(qLower) && !/javascript/.test(qLower)) {
+    chatLanguage = 'java';
+  } else if (/\bpython\b/.test(qLower)) {
+    chatLanguage = 'python';
+  }
+
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -1144,7 +1153,7 @@ async function sendChatMessage() {
       body: JSON.stringify({
         query: query,
         code_context: code,
-        language: currentLanguage,
+        language: chatLanguage,
         findings_context: findings,
       }),
     });

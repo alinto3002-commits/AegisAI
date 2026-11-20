@@ -89,11 +89,29 @@ class ConversationalCodeAssistant(BaseAgent):
         gemini_answer = None
         if os.getenv("GEMINI_API_KEY", "") or GEMINI_API_KEY:
             sources_summary = "\n".join([f"- {s.title} ({s.owasp_id or ''} {s.cwe_id or ''}): {s.content}" for s in sources])
+
+            lang_instruction = ""
+            if language == "java":
+                lang_instruction = (
+                    "\nCRITICAL: The developer is working in JAVA. ALL code examples MUST use Java syntax only. "
+                    "Use Java idioms such as PreparedStatement for SQL, ProcessBuilder for commands, "
+                    "ObjectInputFilter for deserialization, and proper Java exception handling. "
+                    "Do NOT show Python code under any circumstances."
+                )
+            elif language == "python":
+                lang_instruction = (
+                    "\nCRITICAL: The developer is working in PYTHON. ALL code examples MUST use Python syntax only. "
+                    "Use Python idioms such as parameterized queries with sqlite3/psycopg2, subprocess with lists, "
+                    "json/pickle alternatives, and proper Python exception handling. "
+                    "Do NOT show Java code under any circumstances."
+                )
+
             gemini_prompt = f"""You are AegisAI's expert code review and application security assistant.
 Answer the developer's question grounded in the latest OWASP Top 10 (2025 Edition) and secure coding standards.
 
 Developer Question: {query}
-Target Programming Language: {language}
+Target Programming Language: {language.upper()}
+{lang_instruction}
 
 Active Code Context:
 ```{language}
@@ -104,9 +122,10 @@ Grounded OWASP / Security Guidelines:
 {sources_summary}
 
 Instructions:
-1. Provide a direct, technically rigorous explanation.
-2. If relevant, show secure replacement code and explain why it prevents the vulnerability.
-3. Be concise and format with clear markdown headings and code blocks.
+1. Provide a direct, technically rigorous explanation tailored to {language.upper()}.
+2. Show secure replacement code ONLY in {language.upper()} — no other language.
+3. Be concise and format with clear markdown headings and code blocks using ```{language} fences.
+4. If the question mentions a language (e.g. "what about java"), answer specifically for that language with {language.upper()} examples.
 """
             gemini_answer = self._call_gemini_api(gemini_prompt)
 
@@ -125,6 +144,140 @@ Instructions:
             suggested_followups=suggested_followups,
         )
 
+    # Java secure code examples used when Gemini is offline
+    _JAVA_EXAMPLES = {
+        "sql": {
+            "title": "SQL Injection Prevention — Java PreparedStatement",
+            "vulnerable": (
+                'Statement stmt = conn.createStatement();\n'
+                'ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE id = " + userId);'
+            ),
+            "secure": (
+                'PreparedStatement ps = conn.prepareStatement(\n'
+                '    "SELECT * FROM users WHERE id = ?");\n'
+                'ps.setInt(1, userId);\n'
+                'ResultSet rs = ps.executeQuery();'
+            ),
+            "guidelines": [
+                "Always use `PreparedStatement` with `?` placeholders — never concatenate user input into SQL.",
+                "Use an ORM (Hibernate / JPA) with named parameters for a higher-level alternative.",
+                "Apply least-privilege DB accounts so a breach limits blast radius.",
+            ],
+        },
+        "command": {
+            "title": "Command Injection Prevention — Java ProcessBuilder",
+            "vulnerable": (
+                'Runtime.getRuntime().exec("ls -la " + userInput);'
+            ),
+            "secure": (
+                'ProcessBuilder pb = new ProcessBuilder(\n'
+                '    "ls", "-la", sanitizedPath);\n'
+                'pb.redirectErrorStream(true);\n'
+                'Process p = pb.start();'
+            ),
+            "guidelines": [
+                "Use `ProcessBuilder` with a List of arguments to avoid shell interpretation.",
+                "Never pass user input directly to `Runtime.exec()` or shell commands.",
+                "Whitelist acceptable input values before passing to any OS command.",
+            ],
+        },
+        "deserialization": {
+            "title": "Insecure Deserialization Prevention — Java ObjectInputFilter",
+            "vulnerable": (
+                'ObjectInputStream ois = new ObjectInputStream(inputStream);\n'
+                'Object obj = ois.readObject();  // unsafe — allows arbitrary classes'
+            ),
+            "secure": (
+                'ObjectInputStream ois = new ObjectInputStream(inputStream);\n'
+                'ois.setObjectInputFilter(ObjectInputFilter.Config.createFilter(\n'
+                '    "com.myapp.dto.*;java.base/*;!*"));\n'
+                'MyDto obj = (MyDto) ois.readObject();'
+            ),
+            "guidelines": [
+                "Use `ObjectInputFilter` to whitelist only trusted classes during deserialization.",
+                "Prefer JSON (Jackson/Gson) or Protobuf over Java serialization for data exchange.",
+                "Never deserialize data from untrusted sources without strict class filtering.",
+            ],
+        },
+        "path": {
+            "title": "Path Traversal Prevention — Java Canonical Path Validation",
+            "vulnerable": (
+                'File f = new File(baseDir, userInput);\n'
+                'InputStream is = new FileInputStream(f);  // traversal risk'
+            ),
+            "secure": (
+                'File f = new File(baseDir, userInput);\n'
+                'String canonical = f.getCanonicalPath();\n'
+                'if (!canonical.startsWith(baseDir.getCanonicalPath() + File.separator)) {\n'
+                '    throw new SecurityException("Path traversal detected");\n'
+                '}\n'
+                'InputStream is = new FileInputStream(f);'
+            ),
+            "guidelines": [
+                "Always call `getCanonicalPath()` and validate the result starts with your allowed base directory.",
+                "Use `java.nio.file.Path.normalize()` and `startsWith()` for a modern alternative.",
+                "Reject any path containing `..` segments before resolving.",
+            ],
+        },
+        "secret": {
+            "title": "Hardcoded Secrets Prevention — Java Environment Variables",
+            "vulnerable": (
+                'String dbPassword = "hunter2";  // hardcoded secret'
+            ),
+            "secure": (
+                'String dbPassword = System.getenv("DB_PASSWORD");\n'
+                'if (dbPassword == null || dbPassword.isBlank()) {\n'
+                '    throw new IllegalStateException("DB_PASSWORD env var not set");\n'
+                '}'
+            ),
+            "guidelines": [
+                "Load secrets from environment variables or a secrets manager (AWS Secrets Manager, HashiCorp Vault).",
+                "Never commit credentials to source control — use `.gitignore` and pre-commit secret scanning.",
+                "Rotate secrets immediately if they are ever exposed.",
+            ],
+        },
+        "default": {
+            "title": "Java Secure Coding — OWASP Top 10 (2025) Quick Reference",
+            "vulnerable": (
+                '// ❌ Unsafe: concatenated SQL, raw exec, hardcoded secret\n'
+                'stmt.executeQuery("SELECT * FROM users WHERE id = " + id);\n'
+                'Runtime.getRuntime().exec("cmd " + userInput);\n'
+                'String secret = "hardcoded_password";'
+            ),
+            "secure": (
+                '// ✅ Safe: PreparedStatement, ProcessBuilder, env secret\n'
+                'PreparedStatement ps = conn.prepareStatement("SELECT * FROM users WHERE id = ?");\n'
+                'ps.setInt(1, id);\n'
+                '\n'
+                'new ProcessBuilder("cmd", sanitizedArg).start();\n'
+                '\n'
+                'String secret = System.getenv("MY_SECRET");'
+            ),
+            "guidelines": [
+                "SQL Injection: Use `PreparedStatement` with `?` placeholders.",
+                "Command Injection: Use `ProcessBuilder` with a list of arguments.",
+                "Deserialization: Apply `ObjectInputFilter` to whitelist safe classes.",
+                "Path Traversal: Validate `getCanonicalPath()` against a trusted base directory.",
+                "Secrets: Load from environment variables or a secrets manager — never hardcode.",
+                "Refer to OWASP Top 10 (2025) for the full secure coding standard.",
+            ],
+        },
+    }
+
+    def _get_java_example(self, q_lower: str) -> dict:
+        """Select the most relevant Java example block for the query."""
+        if any(k in q_lower for k in ("sql", "injection", "query", "database", "preparedstatement")):
+            return self._JAVA_EXAMPLES["sql"]
+        if any(k in q_lower for k in ("command", "exec", "processbuilder", "runtime", "shell", "os")):
+            return self._JAVA_EXAMPLES["command"]
+        if any(k in q_lower for k in ("deserializ", "pickle", "serial", "objectinput")):
+            return self._JAVA_EXAMPLES["deserialization"]
+        if any(k in q_lower for k in ("path", "traversal", "file", "directory", "zipslip")):
+            return self._JAVA_EXAMPLES["path"]
+        if any(k in q_lower for k in ("secret", "password", "credential", "hardcod", "api key")):
+            return self._JAVA_EXAMPLES["secret"]
+        return self._JAVA_EXAMPLES["default"]
+
     def _generate_answer(
         self,
         query: str,
@@ -140,8 +293,6 @@ Instructions:
         if findings:
             for f in findings:
                 title = f.get("title", "").lower()
-                cwe = f.get("cwe_id", "").lower()
-                category = f.get("category", "").lower()
                 line = str(f.get("line_start", ""))
                 if (line and f"line {line}" in q_lower) or any(w in q_lower for w in title.split()[:3]):
                     matching_finding = f
@@ -164,18 +315,38 @@ Instructions:
 
 #### ✅ Secure Replacement Code:
 ```{language}
-{rem.get('corrected_snippet', '# Use parameterized query or safe API')}
+{rem.get('corrected_snippet', '// Use parameterized query or safe API')}
 ```
 
 #### 📚 Grounded Knowledge Base Reference:
 {sources[0].content if sources else 'Follow standard OWASP 2025 defensive coding practices.'}
 """
 
-        # General RAG query answer using top source
+        # --- Java-specific inline answer (Gemini offline fallback) ---
+        if language == "java":
+            ex = self._get_java_example(q_lower)
+            guidelines_md = "\n".join(f"- {g}" for g in ex["guidelines"])
+            top_ref = f"\n\n#### 📚 OWASP Reference:\n{sources[0].content}" if sources else ""
+            return f"""### ☕ {ex['title']}
+
+#### ⚠️ Vulnerable Java Pattern to Avoid:
+```java
+{ex['vulnerable']}
+```
+
+#### ✅ Secure Java Implementation:
+```java
+{ex['secure']}
+```
+
+#### 🛡️ Remediation Guidelines:
+{guidelines_md}{top_ref}
+"""
+
+        # General RAG query answer using top source (Python / other)
         if sources:
             top_doc = sources[0]
 
-            # Find matching source document to extract code examples if present
             raw_doc = None
             indexer_docs = getattr(getattr(self.retriever.store, "fallback_indexer", None), "documents", [])
             for d in indexer_docs:

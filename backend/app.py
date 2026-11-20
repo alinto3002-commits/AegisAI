@@ -97,10 +97,18 @@ def analyze_code(submission: CodeSubmission):
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_with_assistant(query: ChatQuery):
     """Module 5: RAG-Powered Conversational Code Assistant."""
+    # Allow query text itself to override language (e.g. "what about java")
+    q_lower = (query.query or "").lower()
+    detected_lang = query.language or "python"
+    if "java" in q_lower and "javascript" not in q_lower:
+        detected_lang = "java"
+    elif "python" in q_lower:
+        detected_lang = "python"
+
     response = chat_assistant.run(
         query=query.query,
         code_context=query.code_context,
-        language=query.language or "python",
+        language=detected_lang,
         findings_context=query.findings_context,
         history=query.history,
     )
