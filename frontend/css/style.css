@@ -1058,6 +1058,30 @@ body {
 .finding-card.MEDIUM   { border-left-color: var(--med-color); }
 .finding-card.LOW      { border-left-color: var(--low-color); }
 .finding-card.INFO     { border-left-color: var(--info-color); }
+.finding-card.RESOLVED { border-left-color: #16a34a; background: #fafdfa; }
+
+.findings-group-title {
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  margin: 0.5rem 0 0.75rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.findings-group-title.unsolved-group {
+  background: #fef2f2;
+  color: #991b1b;
+  border-left: 3px solid #ef4444;
+}
+.findings-group-title.solved-group {
+  background: #f0fdf4;
+  color: #166534;
+  border-left: 3px solid #22c55e;
+}
 
 .finding-header {
   display: flex;
@@ -1090,6 +1114,7 @@ body {
 .severity-pill.MEDIUM   { background: var(--med-bg); color: var(--med-color); border: 1px solid var(--med-border); }
 .severity-pill.LOW      { background: var(--low-bg); color: var(--low-color); border: 1px solid var(--low-border); }
 .severity-pill.INFO     { background: var(--info-bg); color: var(--info-color); border: 1px solid var(--info-border); }
+.severity-pill.RESOLVED { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
 
 .finding-title {
   font-family: var(--font-subheading);

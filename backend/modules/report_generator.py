@@ -115,12 +115,36 @@ class CodeReviewReportGenerator:
                 md.append(f"")
 
             if report.findings:
-                md.append(f"## ⚠️ Remaining Outstanding Findings ({len(report.findings)})")
+                md.append(f"## ⚠️ Outstanding Unsolved Issues & Explanations ({len(report.findings)})")
+                md.append("")
+                md.append("The following issues have **not** been resolved yet. Below is each error with its explanation, vulnerable code evidence, and remediation guidance:")
+                md.append("")
                 for idx, rem_f in enumerate(report.findings, 1):
-                    md.append(f"- **{idx}. [{rem_f.severity.value}] {rem_f.title}** (Line {rem_f.line_start}): {rem_f.description}")
+                    sev_val = rem_f.severity.value if hasattr(rem_f.severity, "value") else str(rem_f.severity)
+                    md.append(f"### #{idx}. [UNSOLVED] [{sev_val}] {rem_f.title} (Line {rem_f.line_start})")
+                    md.append(f"- **Severity Level:** `{sev_val}`")
+                    md.append(f"- **Standard Classification:** `{rem_f.owasp_category or 'General'}` | **CWE:** `{rem_f.cwe_id or 'N/A'}` | **Agent:** `{rem_f.agent_type}`")
+                    md.append(f"- **The Error & Description:** {rem_f.description}")
+                    if rem_f.evidence:
+                        md.append(f"\n**Vulnerable Code Snippet:**\n```{report.language}\n{rem_f.evidence.strip()}\n```")
+                    if rem_f.remediation:
+                        md.append(f"\n**Error Explanation & Remediation Guidance:**\n{rem_f.remediation.explanation}")
+                        if rem_f.remediation.remediation_steps:
+                            md.append("\n**Step-by-Step Fix Instructions:**")
+                            for step in rem_f.remediation.remediation_steps:
+                                md.append(f"- {step}")
+                        if rem_f.remediation.corrected_snippet:
+                            md.append(f"\n**Recommended Secure Implementation:**\n```{report.language}\n{rem_f.remediation.corrected_snippet.strip()}\n```")
+                        if rem_f.remediation.diff:
+                            md.append(f"\n**Unified Diff:**\n```diff\n{rem_f.remediation.diff.strip()}\n```")
+                        if rem_f.remediation.unit_test_code:
+                            test_framework = "pytest" if report.language == "python" else "JUnit 5"
+                            md.append(f"\n**Automated Regression Test ({test_framework}):**\n```{report.language}\n{rem_f.remediation.unit_test_code.strip()}\n```")
+                    md.append("\n---")
+                    md.append("")
             else:
                 md.append(f"## ✅ Final Verification Statement")
-                md.append(f"**Zero outstanding security vulnerabilities or quality smells remain.** The codebase meets all OWASP Top 10 (2025) compliance gates and is certified safe for merge and deployment.")
+                md.append(f"**Zero outstanding security vulnerabilities or quality smells remain.** All identified errors have been successfully solved. The codebase meets all OWASP Top 10 (2025) compliance gates and is certified safe for merge and deployment.")
 
             return "\n".join(md)
 
@@ -408,24 +432,55 @@ class CodeReviewReportGenerator:
                     elements.append(t_card)
                     elements.append(Spacer(1, 6))
 
-                # Remaining issues check
+                # Remaining unsolved issues check
                 if report.findings:
-                    elements.append(Paragraph(f"Remaining Outstanding Issues ({len(report.findings)})", h2_style))
-                    rem_rows = [[Paragraph("<b>Severity</b>", body_style), Paragraph("<b>Issue</b>", body_style), Paragraph("<b>Location</b>", body_style)]]
-                    for rf in report.findings:
-                        rem_rows.append([
-                            Paragraph(f"[{rf.severity.value}]", body_style),
-                            Paragraph(escape_rl(rf.title), body_style),
-                            Paragraph(f"Line {rf.line_start}", body_style),
-                        ])
-                    t_rem = Table(rem_rows, colWidths=[80, 360, 100])
-                    t_rem.setStyle(TableStyle([
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fef2f2")),
-                        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#fecdd3")),
-                        ("TOPPADDING", (0, 0), (-1, -1), 3),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                    ]))
-                    elements.append(t_rem)
+                    elements.append(Paragraph(f"Outstanding Unsolved Issues &amp; Explanations ({len(report.findings)})", h2_style))
+                    unsolved_intro = (
+                        "The following issues remain <b>unsolved</b> in the current codebase. "
+                        "Below is each error with its explanation, vulnerable code evidence, and remediation guidance:"
+                    )
+                    elements.append(Paragraph(unsolved_intro, body_style))
+                    elements.append(Spacer(1, 6))
+
+                    for idx, rem_f in enumerate(report.findings, 1):
+                        sev_val = rem_f.severity.value if hasattr(rem_f.severity, "value") else str(rem_f.severity)
+                        f_card = [
+                            [
+                                Paragraph(f"<b>[UNSOLVED] #{idx} &bull; [{escape_rl(sev_val)}] {escape_rl(rem_f.title)}</b> (Line {rem_f.line_start})", body_style),
+                            ],
+                            [
+                                Paragraph(f"<i>Classification: {escape_rl(rem_f.owasp_category or 'General')} &bull; CWE: {escape_rl(rem_f.cwe_id or 'N/A')} &bull; Status: <font color='#991b1b'><b>PENDING REMEDIATION</b></font></i>", body_style),
+                            ],
+                            [
+                                Paragraph(f"<b>The Error:</b><br/>{escape_rl(rem_f.description)}", body_style),
+                            ],
+                        ]
+                        if rem_f.evidence:
+                            clean_ev = escape_rl(rem_f.evidence.strip()[:350])
+                            f_card.append([
+                                Paragraph(f"<b>Vulnerable Code Snippet:</b><br/><font face='Courier' size=7 color='#991b1b'>{clean_ev}</font>", body_style)
+                            ])
+                        if rem_f.remediation:
+                            f_card.append([
+                                Paragraph(f"<b>Error Explanation &amp; Remediation:</b><br/>{escape_rl(rem_f.remediation.explanation)}", body_style)
+                            ])
+                            if rem_f.remediation.corrected_snippet:
+                                clean_corr = escape_rl(rem_f.remediation.corrected_snippet.strip()[:350])
+                                f_card.append([
+                                    Paragraph(f"<b>Recommended Secure Implementation:</b><br/><font face='Courier' size=7 color='#166534'>{clean_corr}</font>", body_style)
+                                ])
+
+                        t_card = Table(f_card, colWidths=[540])
+                        t_card.setStyle(TableStyle([
+                            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fee2e2")),
+                            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#ffffff")),
+                            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#fca5a5")),
+                            ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
+                            ("TOPPADDING", (0, 0), (-1, -1), 3),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                        ]))
+                        elements.append(t_card)
+                        elements.append(Spacer(1, 6))
                 else:
                     elements.append(Spacer(1, 4))
                     cert_box = [[

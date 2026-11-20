@@ -112,6 +112,81 @@ def test_report_generation():
     assert 'The Error Before' in md_after
     assert 'What Changed to Solve the Error' in md_after
 
+    # 3. Test Report with PARTIAL remediation (1 solved error, 1 unsolved error)
+    partial_report = ReviewReport(
+        id='test-partial-789',
+        filename='vulnerable_app.py',
+        language='python',
+        lines_of_code=45,
+        cyclomatic_complexity=3,
+        health_score=75,
+        verdict='CHANGES_REQUESTED',
+        risk_level='Medium',
+        findings=[
+            Finding(
+                id='SEC-SECRET-002',
+                title='Hardcoded Sensitive API Token',
+                severity=FindingSeverity.HIGH,
+                line_start=8,
+                line_end=8,
+                cwe_id='CWE-798',
+                owasp_category='A07:2025 - Identification and Authentication Failures',
+                category='Security',
+                description='Hardcoded secret credential exposed in source code repository.',
+                evidence='API_TOKEN = "sk-live-secret-token-xyz"',
+                agent_type='Security Vulnerability Agent',
+                remediation=RemediationSuggestion(
+                    original_snippet='API_TOKEN = "sk-live-secret-token-xyz"',
+                    explanation='Load secret token from environment variables or a vault.',
+                    corrected_snippet='API_TOKEN = os.getenv("API_TOKEN")',
+                    diff='- API_TOKEN = "..."\n+ API_TOKEN = os.getenv("API_TOKEN")',
+                    remediation_steps=['Extract token to environment variable']
+                )
+            )
+        ],
+        is_remediated=True,
+        initial_health_score=35,
+        pr_summary=PRReviewSummary(
+            verdict='CHANGES_REQUESTED',
+            risk_level='Medium',
+            health_score=75,
+            summary_markdown='1 resolved, 1 remaining.',
+            recommended_actions=['Fix API token']
+        ),
+        resolved_findings=[
+            {
+                'id': 'SEC-SQLI-001',
+                'title': 'SQL Injection via Unescaped String Formatting',
+                'severity': 'CRITICAL',
+                'line_start': 14,
+                'line_end': 14,
+                'cwe_id': 'CWE-89',
+                'owasp_category': 'A03:2025 - Injection',
+                'description': 'Unsanitized input directly formatted into SQL query string enables arbitrary database execution.',
+                'evidence': 'query = f"SELECT * FROM users WHERE username = \'{user}\'"',
+                'remediation': {
+                    'explanation': 'Replaced insecure f-string with parameterized query placeholder (?).',
+                    'original_snippet': 'query = f"SELECT * FROM users WHERE username = \'{user}\'"',
+                    'corrected_snippet': 'cursor.execute("SELECT * FROM users WHERE username = ?", (user,))',
+                    'diff': '- query = f"SELECT..."\n+ cursor.execute("SELECT...", (user,))'
+                }
+            }
+        ]
+    )
+
+    md_partial = CodeReviewReportGenerator.to_markdown(partial_report)
+    pdf_partial = CodeReviewReportGenerator.to_pdf(partial_report)
+    print('\n=== CASE 3 (PARTIAL: 1 SOLVED, 1 UNSOLVED) ===')
+    print('Solved section present:', 'What Changed to Solve the Error' in md_partial)
+    print('Unsolved section present:', 'Outstanding Unsolved Issues' in md_partial)
+    print('Unsolved explanation present:', 'Load secret token from environment variables' in md_partial)
+    print('Partial PDF Bytes size:', len(pdf_partial))
+    assert 'The Error Before' in md_partial
+    assert 'What Changed to Solve the Error' in md_partial
+    assert 'Outstanding Unsolved Issues' in md_partial
+    assert 'Load secret token from environment variables' in md_partial
+    assert len(pdf_partial) > 1000
+
     print('\nAll assertions passed successfully! Both report structures verified.')
 
 if __name__ == '__main__':

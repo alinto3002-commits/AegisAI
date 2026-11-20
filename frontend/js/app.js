@@ -597,54 +597,146 @@ function filterFindings(filter) {
   const container = document.getElementById('findings-list');
   container.innerHTML = '';
 
-  if (!currentReport || !currentReport.findings || currentReport.findings.length === 0) {
+  const findings = (currentReport && currentReport.findings) ? currentReport.findings : [];
+  const resolved = (currentReport && currentReport.resolved_findings) ? currentReport.resolved_findings : (resolvedFindingsHistory || []);
+
+  if (findings.length === 0 && resolved.length === 0) {
     container.innerHTML = `<div class="findings-placeholder"><p>No findings match the selected filter.</p></div>`;
     return;
   }
 
-  let filtered = currentReport.findings;
+  let filteredUnsolved = findings;
+  let filteredResolved = resolved;
+
   if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].includes(filter)) {
-    filtered = currentReport.findings.filter(f => f.severity === filter);
+    filteredUnsolved = findings.filter(f => (typeof f.severity === 'object' ? f.severity.value : f.severity) === filter);
+    filteredResolved = resolved.filter(f => (typeof f.severity === 'object' ? f.severity.value : f.severity) === filter);
   } else if (filter === 'SECURITY') {
-    filtered = currentReport.findings.filter(f => f.agent_type.includes('Security'));
+    filteredUnsolved = findings.filter(f => f.agent_type && f.agent_type.includes('Security'));
+    filteredResolved = resolved.filter(f => (f.category === 'Security' || (f.owasp_category && f.owasp_category !== 'General')));
   } else if (filter === 'QUALITY') {
-    filtered = currentReport.findings.filter(f => f.agent_type.includes('Code Analysis'));
+    filteredUnsolved = findings.filter(f => f.agent_type && f.agent_type.includes('Code Analysis'));
+    filteredResolved = resolved.filter(f => (f.category !== 'Security' || f.owasp_category === 'General'));
   }
 
-  if (filtered.length === 0) {
+  if (filteredUnsolved.length === 0 && filteredResolved.length === 0) {
     container.innerHTML = `<div class="findings-placeholder"><p>No findings in this category.</p></div>`;
     return;
   }
 
-  filtered.forEach(f => {
-    const card = document.createElement('div');
-    card.className = `finding-card ${f.severity}`;
+  // 1. Render Outstanding Unsolved Errors (Error and its explanation)
+  if (filteredUnsolved.length > 0) {
+    if (filteredResolved.length > 0) {
+      const unsolvedHeader = document.createElement('div');
+      unsolvedHeader.className = 'findings-group-title unsolved-group';
+      unsolvedHeader.innerHTML = `<span>⚠️ Outstanding Unsolved Issues (${filteredUnsolved.length})</span>`;
+      container.appendChild(unsolvedHeader);
+    }
 
-    let remHtml = '';
-    if (f.remediation) {
-      const escapedRemCode = escapeHtml(f.remediation.corrected_snippet || '');
-      const escapedEvidence = escapeHtml(f.evidence || '');
-      const rawDiff = f.remediation.diff || '';
-      const testCode = f.remediation.unit_test_code ? escapeHtml(f.remediation.unit_test_code) : '';
+    filteredUnsolved.forEach(f => {
+      const card = document.createElement('div');
+      const sev = typeof f.severity === 'object' ? f.severity.value : f.severity;
+      card.className = `finding-card ${sev}`;
 
-      const testSectionHtml = testCode ? `
-        <div id="test-box-${f.id}" class="test-preview-box hidden" style="margin-top: 0.65rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.75rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
-            <span style="font-size: 0.76rem; color: #1e3a5f; font-weight: 700; font-family: var(--font-heading); letter-spacing: 0.04em;">🧪 Automated Regression Test (${currentLanguage === 'python' ? 'pytest' : 'JUnit 5'})</span>
-            <button class="copy-btn" onclick="copySnippet(this, \`${testCode.replace(/`/g, '\\`')}\`)">Copy Test</button>
+      let remHtml = '';
+      if (f.remediation) {
+        const escapedRemCode = escapeHtml(f.remediation.corrected_snippet || '');
+        const escapedEvidence = escapeHtml(f.evidence || '');
+        const rawDiff = f.remediation.diff || '';
+        const testCode = f.remediation.unit_test_code ? escapeHtml(f.remediation.unit_test_code) : '';
+
+        const testSectionHtml = testCode ? `
+          <div id="test-box-${f.id}" class="test-preview-box hidden" style="margin-top: 0.65rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
+              <span style="font-size: 0.76rem; color: #1e3a5f; font-weight: 700; font-family: var(--font-heading); letter-spacing: 0.04em;">🧪 Automated Regression Test (${currentLanguage === 'python' ? 'pytest' : 'JUnit 5'})</span>
+              <button class="copy-btn" onclick="copySnippet(this, \`${testCode.replace(/`/g, '\\`')}\`)">Copy Test</button>
+            </div>
+            <pre class="remediation-code" style="color: #0f172a; background: #ffffff; border: 1px solid #e2e8f0; max-height: 220px; overflow-y: auto;"><code>${testCode}</code></pre>
           </div>
-          <pre class="remediation-code" style="color: #0f172a; background: #ffffff; border: 1px solid #e2e8f0; max-height: 220px; overflow-y: auto;"><code>${testCode}</code></pre>
-        </div>
-      ` : '';
+        ` : '';
 
+        const diffSectionHtml = rawDiff ? `
+          <div id="diff-box-${f.id}" class="diff-preview-box hidden">
+            <div class="diff-box-header">
+              <span class="diff-box-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+                Unified Diff (Before vs After Patch)
+              </span>
+              <button class="copy-btn" onclick="copySnippet(this, \`${escapeHtml(rawDiff).replace(/`/g, '\\`')}\`)">Copy Patch</button>
+            </div>
+            <div class="unified-diff-container">
+              ${renderDiffLinesHtml(rawDiff)}
+            </div>
+          </div>
+        ` : '';
+
+        remHtml = `
+          <div class="remediation-box">
+            <div class="remediation-header">
+              <span class="remediation-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Error Explanation & Remediation Guidance
+              </span>
+              <div style="display: flex; gap: 0.45rem; flex-wrap: wrap;">
+                <button id="apply-btn-${f.id}" class="copy-btn btn-action-apply" onclick="applyFixToEditor('${f.id}')" title="Apply corrected code directly into the editor">⚡ Apply Fix</button>
+                ${rawDiff ? `<button class="copy-btn btn-action-diff" onclick="toggleDiffBox('${f.id}')" title="Toggle unified before/after diff">⚖️ View Diff</button>` : ''}
+                <button class="copy-btn" onclick="copySnippet(this, \`${escapedRemCode.replace(/`/g, '\\`')}\`)">Copy Fix</button>
+                ${testCode ? `<button class="copy-btn btn-action-test" onclick="toggleTestBox('${f.id}')">🧪 Unit Test</button>` : ''}
+                <button class="copy-btn btn-action-discuss" onclick="discussFindingWithAssistant('${f.id}')">💬 Consult Auditor</button>
+              </div>
+            </div>
+            <div style="font-size: 0.86rem; color: #475569; margin-bottom: 0.55rem; line-height: 1.5;">${escapeHtml(f.remediation.explanation)}</div>
+            <pre class="remediation-code"><code>${escapedRemCode}</code></pre>
+            ${diffSectionHtml}
+            ${testSectionHtml}
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="finding-header">
+          <div class="finding-title-group">
+            <span class="severity-pill ${sev}">${sev}</span>
+            <span class="finding-title">${escapeHtml(f.title)}</span>
+          </div>
+          <span class="line-tag">Line ${f.line_start}</span>
+        </div>
+        <div class="finding-meta">
+          ${f.owasp_category ? `<span class="meta-chip owasp">${escapeHtml(f.owasp_category)}</span>` : ''}
+          ${f.cwe_id ? `<span class="meta-chip">${escapeHtml(f.cwe_id)}</span>` : ''}
+          <span class="meta-chip">${escapeHtml(f.category || 'Security')}</span>
+        </div>
+        <p class="finding-desc">${escapeHtml(f.description)}</p>
+        ${f.evidence ? `<pre class="finding-evidence"><code>${escapeHtml(f.evidence)}</code></pre>` : ''}
+        ${remHtml}
+      `;
+
+      container.appendChild(card);
+    });
+  }
+
+  // 2. Render Solved Errors (The error before and how it was solved)
+  if (filteredResolved.length > 0) {
+    const solvedHeader = document.createElement('div');
+    solvedHeader.className = 'findings-group-title solved-group';
+    solvedHeader.innerHTML = `<span>✅ Solved Errors & Remediation Changelog (${filteredResolved.length})</span>`;
+    container.appendChild(solvedHeader);
+
+    filteredResolved.forEach((r, idx) => {
+      const card = document.createElement('div');
+      card.className = `finding-card RESOLVED`;
+
+      const origSnippet = r.remediation && r.remediation.original_snippet ? r.remediation.original_snippet : (r.evidence || '');
+      const corrSnippet = r.remediation && r.remediation.corrected_snippet ? r.remediation.corrected_snippet : '';
+      const expl = r.remediation && r.remediation.explanation ? r.remediation.explanation : 'Replaced insecure pattern with safe parameterized API / defensive logic.';
+      const rawDiff = r.remediation && r.remediation.diff ? r.remediation.diff : '';
+
+      const diffId = `diff-solved-${idx}`;
       const diffSectionHtml = rawDiff ? `
-        <div id="diff-box-${f.id}" class="diff-preview-box hidden">
+        <div id="${diffId}" class="diff-preview-box hidden" style="margin-top: 0.65rem;">
           <div class="diff-box-header">
-            <span class="diff-box-title">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
-              Unified Diff (Before vs After Patch)
-            </span>
-            <button class="copy-btn" onclick="copySnippet(this, \`${escapeHtml(rawDiff).replace(/`/g, '\\`')}\`)">Copy Patch</button>
+            <span class="diff-box-title">⚖️ Unified Diff (Exact Changes Applied)</span>
+            <button class="copy-btn" onclick="copySnippet(this, \`${escapeHtml(rawDiff).replace(/`/g, '\\`')}\`)">Copy Diff</button>
           </div>
           <div class="unified-diff-container">
             ${renderDiffLinesHtml(rawDiff)}
@@ -652,49 +744,46 @@ function filterFindings(filter) {
         </div>
       ` : '';
 
-      remHtml = `
-        <div class="remediation-box">
-          <div class="remediation-header">
-            <span class="remediation-title">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Remediation Guidance (RAG Grounded)
-            </span>
-            <div style="display: flex; gap: 0.45rem; flex-wrap: wrap;">
-              <button id="apply-btn-${f.id}" class="copy-btn btn-action-apply" onclick="applyFixToEditor('${f.id}')" title="Apply corrected code directly into the editor">⚡ Apply Fix</button>
-              ${rawDiff ? `<button class="copy-btn btn-action-diff" onclick="toggleDiffBox('${f.id}')" title="Toggle unified before/after diff">⚖️ View Diff</button>` : ''}
-              <button class="copy-btn" onclick="copySnippet(this, \`${escapedRemCode.replace(/`/g, '\\`')}\`)">Copy Fix</button>
-              ${testCode ? `<button class="copy-btn btn-action-test" onclick="toggleTestBox('${f.id}')">🧪 Unit Test</button>` : ''}
-              <button class="copy-btn btn-action-discuss" onclick="discussFindingWithAssistant('${f.id}')">💬 Consult Auditor</button>
-            </div>
+      card.innerHTML = `
+        <div class="finding-header">
+          <div class="finding-title-group">
+            <span class="severity-pill RESOLVED">✓ RESOLVED</span>
+            <span class="finding-title" style="text-decoration: none; color: #166534;">${escapeHtml(r.title)}</span>
           </div>
-          <div style="font-size: 0.86rem; color: #475569; margin-bottom: 0.55rem; line-height: 1.5;">${escapeHtml(f.remediation.explanation)}</div>
-          <pre class="remediation-code"><code>${escapedRemCode}</code></pre>
+          <span class="line-tag" style="background: #dcfce7; color: #166534; border: 1px solid #86efac;">Originally Line ${r.line_start}</span>
+        </div>
+        <div class="finding-meta">
+          <span class="meta-chip" style="background: #f0fdf4; color: #15803d; border-color: #bbf7d0;">✓ Fixed &amp; Verified</span>
+          ${r.owasp_category ? `<span class="meta-chip owasp">${escapeHtml(r.owasp_category)}</span>` : ''}
+          ${r.cwe_id ? `<span class="meta-chip">${escapeHtml(r.cwe_id)}</span>` : ''}
+        </div>
+        
+        <!-- The Error Before -->
+        <div class="resolved-error-before-box" style="margin: 0.75rem 0; padding: 0.75rem; background: #fff5f5; border: 1px solid #fecaca; border-radius: 4px;">
+          <div style="font-size: 0.78rem; font-weight: 700; color: #991b1b; text-transform: uppercase; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+            <span>⚠️ The Error Before:</span>
+          </div>
+          <p class="finding-desc" style="color: #7f1d1d; margin-bottom: 0.45rem;">${escapeHtml(r.description)}</p>
+          ${origSnippet ? `<pre class="finding-evidence" style="background: #fef2f2; border-color: #fca5a5; color: #991b1b; margin: 0;"><code>${escapeHtml(origSnippet)}</code></pre>` : ''}
+        </div>
+
+        <!-- How Solved -->
+        <div class="resolved-how-solved-box" style="margin: 0.75rem 0 0.35rem 0; padding: 0.75rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: #166534; text-transform: uppercase; display: flex; align-items: center; gap: 0.35rem;">
+              <span>🛠️ How Solved (Changes Applied):</span>
+            </div>
+            ${rawDiff ? `<button class="copy-btn btn-action-diff" onclick="document.getElementById('${diffId}').classList.toggle('hidden')">⚖️ View Diff</button>` : ''}
+          </div>
+          <p style="font-size: 0.85rem; color: #166534; margin-bottom: 0.45rem; line-height: 1.45;">${escapeHtml(expl)}</p>
+          ${corrSnippet ? `<pre class="remediation-code" style="background: #ffffff; border-color: #86efac; color: #14532d; margin: 0;"><code>${escapeHtml(corrSnippet)}</code></pre>` : ''}
           ${diffSectionHtml}
-          ${testSectionHtml}
         </div>
       `;
-    }
 
-    card.innerHTML = `
-      <div class="finding-header">
-        <div class="finding-title-group">
-          <span class="severity-pill ${f.severity}">${f.severity}</span>
-          <span class="finding-title">${escapeHtml(f.title)}</span>
-        </div>
-        <span class="line-tag">Line ${f.line_start}</span>
-      </div>
-      <div class="finding-meta">
-        ${f.owasp_category ? `<span class="meta-chip owasp">${escapeHtml(f.owasp_category)}</span>` : ''}
-        ${f.cwe_id ? `<span class="meta-chip">${escapeHtml(f.cwe_id)}</span>` : ''}
-        <span class="meta-chip">${escapeHtml(f.category)}</span>
-      </div>
-      <p class="finding-desc">${escapeHtml(f.description)}</p>
-      ${f.evidence ? `<pre class="finding-evidence"><code>${escapeHtml(f.evidence)}</code></pre>` : ''}
-      ${remHtml}
-    `;
-
-    container.appendChild(card);
-  });
+      container.appendChild(card);
+    });
+  }
 }
 
 function toggleTestBox(findingId) {
