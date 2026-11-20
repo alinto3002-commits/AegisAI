@@ -264,6 +264,292 @@ Instructions:
         },
     }
 
+    # Python built-in answers for common queries (Gemini offline fallback)
+    _PYTHON_ANSWERS = {
+        "function": {
+            "title": "How to Create a Python Function",
+            "answer": """\
+### 🐍 How to Create a Python Function
+
+Use the `def` keyword followed by the function name and parentheses.
+
+#### ✅ Basic Function:
+```python
+def greet(name: str) -> str:
+    \"\"\"Returns a greeting message.\"\"\"
+    return f"Hello, {name}!"
+
+# Call it
+print(greet("Alice"))  # Hello, Alice!
+```
+
+#### ✅ Function with Default Arguments:
+```python
+def power(base: int, exp: int = 2) -> int:
+    \"\"\"Returns base raised to exp (default: squared).\"\"\"
+    return base ** exp
+
+print(power(3))    # 9
+print(power(3, 3)) # 27
+```
+
+#### ✅ Function with *args and **kwargs:
+```python
+def summarize(*args, **kwargs):
+    print("Positional:", args)
+    print("Keyword:", kwargs)
+
+summarize(1, 2, 3, name="Alice", role="admin")
+```
+
+#### 🛡️ Secure Coding Tips:
+- Always validate inputs at the top of the function (fail fast).
+- Use type hints (`str`, `int`, `list`) for clarity and static analysis.
+- Keep functions short and focused (Single Responsibility Principle).
+- Avoid mutable default arguments — use `None` instead of `[]`.
+""",
+        },
+        "class": {
+            "title": "How to Create a Python Class",
+            "answer": """\
+### 🐍 How to Create a Python Class
+
+Use the `class` keyword. The `__init__` method is the constructor.
+
+#### ✅ Basic Class:
+```python
+class BankAccount:
+    def __init__(self, owner: str, balance: float = 0.0):
+        self.owner = owner
+        self._balance = balance  # protected attribute
+
+    def deposit(self, amount: float) -> None:
+        if amount <= 0:
+            raise ValueError("Deposit amount must be positive.")
+        self._balance += amount
+
+    def get_balance(self) -> float:
+        return self._balance
+
+    def __repr__(self) -> str:
+        return f"BankAccount(owner={self.owner!r})"
+
+# Usage
+acc = BankAccount("Alice", 100.0)
+acc.deposit(50)
+print(acc.get_balance())  # 150.0
+```
+
+#### 🛡️ Secure Coding Tips:
+- Use `_name` for protected and `__name` for private attributes.
+- Validate all inputs in `__init__` and setter methods.
+- Prefer `@property` over public attributes to enforce encapsulation.
+""",
+        },
+        "package": {
+            "title": "How to Create a Python Package / Module",
+            "answer": """\
+### 🐍 How to Create a Python Package
+
+A **module** is a single `.py` file. A **package** is a folder with an `__init__.py` file.
+
+#### ✅ Package Structure:
+```
+mypackage/
+├── __init__.py        # marks folder as a package
+├── utils.py
+└── models.py
+```
+
+#### ✅ `__init__.py` example:
+```python
+# mypackage/__init__.py
+from .utils import helper_function
+from .models import UserModel
+
+__all__ = ["helper_function", "UserModel"]
+```
+
+#### ✅ Importing from your package:
+```python
+from mypackage import helper_function
+from mypackage.models import UserModel
+```
+
+#### 🛡️ Secure Coding Tips:
+- Use `__all__` to explicitly control what is exported.
+- Never use wildcard imports (`from module import *`) in production code.
+- Keep sensitive logic in private modules (prefix with `_`).
+""",
+        },
+        "loop": {
+            "title": "How to Use Loops in Python",
+            "answer": """\
+### 🐍 Loops in Python
+
+#### ✅ `for` loop:
+```python
+fruits = ["apple", "banana", "cherry"]
+for fruit in fruits:
+    print(fruit)
+
+# Range-based
+for i in range(5):
+    print(i)  # 0 1 2 3 4
+```
+
+#### ✅ `while` loop:
+```python
+count = 0
+while count < 3:
+    print(count)
+    count += 1
+```
+
+#### ✅ List Comprehension (Pythonic):
+```python
+squares = [x ** 2 for x in range(10)]
+```
+
+#### 🛡️ Secure Coding Tips:
+- Always ensure `while` loops have a reachable exit condition to prevent infinite loops (DoS risk).
+- Limit iteration over untrusted external data with a max-count guard.
+""",
+        },
+        "sql": {
+            "title": "SQL Injection Prevention — Python Parameterized Queries",
+            "answer": """\
+### 🐍 SQL Injection Prevention in Python
+
+#### ⚠️ Vulnerable (Never do this):
+```python
+query = f"SELECT * FROM users WHERE id = {user_id}"
+cursor.execute(query)
+```
+
+#### ✅ Secure — Parameterized Query:
+```python
+import sqlite3
+
+conn = sqlite3.connect("app.db")
+cursor = conn.cursor()
+cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+rows = cursor.fetchall()
+```
+
+#### ✅ With psycopg2 (PostgreSQL):
+```python
+cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+```
+
+#### 🛡️ Remediation Guidelines:
+- Always use `?` (sqlite3) or `%s` (psycopg2) placeholders — never f-strings or `.format()` in SQL.
+- Use an ORM (SQLAlchemy) for a higher-level safe alternative.
+- Apply least-privilege DB roles.
+""",
+        },
+        "secret": {
+            "title": "Safe Secret Storage in Python",
+            "answer": """\
+### 🐍 Safe Secret Storage in Python
+
+#### ⚠️ Vulnerable (Never hardcode):
+```python
+API_KEY = "sk-abc123hardcoded"
+DB_PASSWORD = "hunter2"
+```
+
+#### ✅ Secure — Environment Variables:
+```python
+import os
+
+api_key = os.getenv("API_KEY")
+if not api_key:
+    raise RuntimeError("API_KEY environment variable not set.")
+```
+
+#### ✅ Using `python-dotenv` for local dev:
+```python
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # loads from .env file
+db_password = os.getenv("DB_PASSWORD")
+```
+
+#### 🛡️ Remediation Guidelines:
+- Add `.env` to `.gitignore` — never commit it.
+- Use a secrets manager (AWS Secrets Manager, HashiCorp Vault) in production.
+- Rotate secrets immediately if ever exposed.
+""",
+        },
+        "command": {
+            "title": "Command Injection Prevention in Python",
+            "answer": """\
+### 🐍 Command Injection Prevention in Python
+
+#### ⚠️ Vulnerable:
+```python
+import os
+os.system("ls " + user_input)
+```
+
+#### ✅ Secure — subprocess with list:
+```python
+import subprocess
+
+result = subprocess.run(
+    ["ls", "-la", sanitized_path],
+    capture_output=True, text=True, timeout=10
+)
+print(result.stdout)
+```
+
+#### 🛡️ Remediation Guidelines:
+- Never pass `shell=True` with user-controlled input.
+- Always pass arguments as a **list**, not a string.
+- Validate and whitelist input before passing to any OS command.
+""",
+        },
+        "default": {
+            "title": "Python Secure Coding — General Guidance",
+            "answer": """\
+### 🐍 Python Secure Coding — OWASP Top 10 (2025) Quick Reference
+
+#### ✅ Key Secure Coding Practices in Python:
+
+```python
+# 1. Parameterized SQL — never f-strings in queries
+cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+
+# 2. Safe subprocess — use list, never shell=True with user input
+subprocess.run(["ls", "-la", path], capture_output=True)
+
+# 3. Secrets from environment — never hardcode
+import os
+secret = os.getenv("MY_SECRET")
+
+# 4. Input validation — fail fast
+def process(data: str) -> str:
+    if not data or len(data) > 500:
+        raise ValueError("Invalid input")
+    return data.strip()
+
+# 5. Safe deserialization — prefer json over pickle
+import json
+obj = json.loads(untrusted_string)  # safe
+# obj = pickle.loads(data)          # NEVER with untrusted data
+```
+
+#### 🛡️ OWASP Top 10 (2025) Reminders:
+- **A03** Injection: Use parameterized queries and subprocess lists.
+- **A02** Cryptographic Failures: Use `secrets` module, not `random`.
+- **A05** Security Misconfiguration: Validate all env vars at startup.
+- **A08** Insecure Deserialization: Avoid `pickle` with untrusted data.
+""",
+        },
+    }
+
     def _get_java_example(self, q_lower: str) -> dict:
         """Select the most relevant Java example block for the query."""
         if any(k in q_lower for k in ("sql", "injection", "query", "database", "preparedstatement")):
@@ -277,6 +563,32 @@ Instructions:
         if any(k in q_lower for k in ("secret", "password", "credential", "hardcod", "api key")):
             return self._JAVA_EXAMPLES["secret"]
         return self._JAVA_EXAMPLES["default"]
+
+    def _get_python_answer(self, q_lower: str) -> dict:
+        """Select the most relevant Python answer for the query."""
+        if any(k in q_lower for k in ("function", "def ", "method", "func")):
+            return self._PYTHON_ANSWERS["function"]
+        if any(k in q_lower for k in ("class", "object", "oop", "__init__")):
+            return self._PYTHON_ANSWERS["class"]
+        if any(k in q_lower for k in ("package", "module", "import", "__init__", "pip")):
+            return self._PYTHON_ANSWERS["package"]
+        if any(k in q_lower for k in ("loop", "for ", "while", "iterate", "range")):
+            return self._PYTHON_ANSWERS["loop"]
+        if any(k in q_lower for k in ("sql", "injection", "query", "database", "sqlite", "psycopg")):
+            return self._PYTHON_ANSWERS["sql"]
+        if any(k in q_lower for k in ("secret", "password", "credential", "hardcod", "api key", "dotenv")):
+            return self._PYTHON_ANSWERS["secret"]
+        if any(k in q_lower for k in ("command", "exec", "subprocess", "shell", "os.system")):
+            return self._PYTHON_ANSWERS["command"]
+        return self._PYTHON_ANSWERS["default"]
+
+    def _is_general_programming_query(self, q_lower: str) -> bool:
+        """Returns True if the query is a general how-to programming question (not security-specific)."""
+        how_to_words = ("how to", "how do", "how can", "what is", "what are", "explain", "create", "make", "write", "define", "show me", "example")
+        general_topics = ("function", "class", "method", "loop", "package", "module", "variable", "list", "dict", "array", "string", "integer", "type", "import", "syntax", "object", "print")
+        has_how_to = any(w in q_lower for w in how_to_words)
+        has_general_topic = any(t in q_lower for t in general_topics)
+        return has_how_to and has_general_topic
 
     def _generate_answer(
         self,
@@ -342,6 +654,19 @@ Instructions:
 #### 🛡️ Remediation Guidelines:
 {guidelines_md}{top_ref}
 """
+
+        # --- Python-specific inline answer (Gemini offline fallback) ---
+        if language == "python":
+            # Use built-in answer for general programming questions
+            # OR for security questions where RAG top result is irrelevant
+            py = self._get_python_answer(q_lower)
+            rag_irrelevant = not sources or (
+                sources and "smell" in sources[0].title.lower()
+                and not any(k in q_lower for k in ("smell", "long method", "refactor", "code quality"))
+            )
+            if self._is_general_programming_query(q_lower) or rag_irrelevant:
+                top_ref = f"\n\n#### 📚 OWASP Reference:\n{sources[0].content}" if sources and not rag_irrelevant else ""
+                return py["answer"] + top_ref
 
         # General RAG query answer using top source (Python / other)
         if sources:
