@@ -1137,12 +1137,18 @@ async function sendChatMessage() {
   const code = document.getElementById('code-input').value;
   const findings = currentReport ? currentReport.findings : null;
 
-  // Detect if the user explicitly asks about a language in their query
+  // Detect if the user explicitly asks about a language in their query (Java, Python, or both)
   const qLower = query.toLowerCase();
   let chatLanguage = currentLanguage;
-  if (/\bjava\b/.test(qLower) && !/javascript/.test(qLower)) {
+  const hasJava = /\bjava\b/.test(qLower) && !/javascript/.test(qLower);
+  const hasPython = /\bpython\b/.test(qLower);
+  const hasBoth = (hasJava && hasPython) || /\bboth\b/.test(qLower);
+
+  if (hasBoth) {
+    chatLanguage = 'both';
+  } else if (hasJava) {
     chatLanguage = 'java';
-  } else if (/\bpython\b/.test(qLower)) {
+  } else if (hasPython) {
     chatLanguage = 'python';
   }
 

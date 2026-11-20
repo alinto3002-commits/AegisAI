@@ -32,20 +32,17 @@ class ConversationalCodeAssistant(BaseAgent):
         if not api_key:
             return None
 
-        # Priority order of supported models on Google API
+        # Confirmed supported models on Google API
         models_to_try = [
             "gemini-3.5-flash-lite",
             "gemini-3.5-flash",
-            "gemini-flash-latest",
-            "gemini-flash-lite-latest",
-            "gemini-3.8-flash",
         ]
         for model in models_to_try:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
                 payload = json.dumps({
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1024}
+                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 800}
                 }).encode("utf-8")
 
                 req = urllib.request.Request(
@@ -53,7 +50,7 @@ class ConversationalCodeAssistant(BaseAgent):
                     data=payload,
                     headers={"Content-Type": "application/json"},
                 )
-                with urllib.request.urlopen(req, timeout=8) as response:
+                with urllib.request.urlopen(req, timeout=15) as response:
                     if response.status == 200:
                         data = json.loads(response.read().decode("utf-8"))
                         candidates = data.get("candidates", [])
@@ -77,55 +74,74 @@ class ConversationalCodeAssistant(BaseAgent):
         findings_context: Optional[List[Dict[str, Any]]] = None,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> ChatResponse:
+        # Detect if query asks for both or specific language
+        q_lower = query.lower()
+        asks_java = ("java" in q_lower and "javascript" not in q_lower)
+        asks_python = ("python" in q_lower)
+        asks_both = (asks_java and asks_python) or ("both" in q_lower)
+
+        effective_lang = language
+        if asks_both:
+            effective_lang = "both"
+        elif asks_java:
+            effective_lang = "java"
+        elif asks_python:
+            effective_lang = "python"
+
         # 1. Retrieve grounded knowledge base documents
+        retrieval_lang = "java" if effective_lang == "java" else "python"
         sources: List[KnowledgeSearchResult] = self.retriever.retrieve_for_chat(
             user_query=query,
             code_context=code_context,
-            language=language,
+            language=retrieval_lang,
             top_k=3,
         )
 
-        # 2. Try Gemini API first with grounded RAG context
+        # 2. Try Gemini API first
         gemini_answer = None
         if os.getenv("GEMINI_API_KEY", "") or GEMINI_API_KEY:
-            sources_summary = "\n".join([f"- {s.title} ({s.owasp_id or ''} {s.cwe_id or ''}): {s.content}" for s in sources])
+            is_general = self._is_general_programming_query(q_lower)
 
-            lang_instruction = ""
-            if language == "java":
+            if effective_lang == "both":
                 lang_instruction = (
-                    "\nCRITICAL: The developer is working in JAVA. ALL code examples MUST use Java syntax only. "
-                    "Use Java idioms such as PreparedStatement for SQL, ProcessBuilder for commands, "
-                    "ObjectInputFilter for deserialization, and proper Java exception handling. "
-                    "Do NOT show Python code under any circumstances."
+                    "The developer is asking about BOTH PYTHON and JAVA. "
+                    "Provide clear, runnable code examples and explanations for BOTH languages."
                 )
-            elif language == "python":
+            elif effective_lang == "java":
                 lang_instruction = (
-                    "\nCRITICAL: The developer is working in PYTHON. ALL code examples MUST use Python syntax only. "
-                    "Use Python idioms such as parameterized queries with sqlite3/psycopg2, subprocess with lists, "
-                    "json/pickle alternatives, and proper Python exception handling. "
-                    "Do NOT show Java code under any circumstances."
+                    "The developer is asking about JAVA. "
+                    "Provide clear, runnable Java code examples and Java best practices."
+                )
+            else:
+                lang_instruction = (
+                    "The developer is asking about PYTHON. "
+                    "Provide clear, runnable Python code examples and Python best practices."
                 )
 
-            gemini_prompt = f"""You are AegisAI's expert code review and application security assistant.
-Answer the developer's question grounded in the latest OWASP Top 10 (2025 Edition) and secure coding standards.
+            # For general how-to questions, do not force unrelated OWASP code smell context
+            if is_general or not sources or "smell" in (sources[0].title or "").lower():
+                guidelines_section = ""
+            else:
+                sources_summary = "\n".join([f"- {s.title}: {s.content}" for s in sources[:2]])
+                guidelines_section = f"\nRelevant Security Guidelines:\n{sources_summary}\n"
+
+            code_ctx_section = ""
+            if code_context and len(code_context.strip()) > 10:
+                code_ctx_section = f"\nActive Code Context:\n```{effective_lang}\n{code_context[:1200]}\n```\n"
+
+            gemini_prompt = f"""You are AegisAI's expert code review and programming assistant.
+Help the developer with their programming or security question.
 
 Developer Question: {query}
-Target Programming Language: {language.upper()}
+Language: {effective_lang.upper()}
 {lang_instruction}
-
-Active Code Context:
-```{language}
-{(code_context or "No active code provided")[:1500]}
-```
-
-Grounded OWASP / Security Guidelines:
-{sources_summary}
-
+{code_ctx_section}{guidelines_section}
 Instructions:
-1. Provide a direct, technically rigorous explanation tailored to {language.upper()}.
-2. Show secure replacement code ONLY in {language.upper()} — no other language.
-3. Be concise and format with clear markdown headings and code blocks using ```{language} fences.
-4. If the question mentions a language (e.g. "what about java"), answer specifically for that language with {language.upper()} examples.
+1. Provide a direct, technically accurate explanation.
+2. Show clean, runnable code examples with proper markdown code blocks (```python, ```java).
+3. If the question asks for both or compares them, show both Python and Java.
+4. Include practical tips and best practices.
+5. Keep the formatting clean and concise.
 """
             gemini_answer = self._call_gemini_api(gemini_prompt)
 
@@ -133,7 +149,7 @@ Instructions:
         if gemini_answer:
             answer = gemini_answer
         else:
-            answer = self._generate_answer(query, sources, code_context, language, findings_context)
+            answer = self._generate_answer(query, sources, code_context, effective_lang, findings_context)
 
         # 4. Formulate smart suggested follow-up questions
         suggested_followups = self._generate_followups(query, sources)
@@ -235,6 +251,159 @@ Instructions:
                 "Never commit credentials to source control — use `.gitignore` and pre-commit secret scanning.",
                 "Rotate secrets immediately if they are ever exposed.",
             ],
+        },
+        "function": {
+            "title": "How to Create a Java Method / Function",
+            "answer": """### ☕ How to Create a Java Function (Method)
+
+In Java, functions are defined as **methods** inside a class.
+
+#### ✅ Complete Java Example:
+```java
+public class Calculator {
+
+    // 1. Static method with parameters and a return value
+    public static int add(int a, int b) {
+        return a + b;
+    }
+
+    // 2. Void method (performs an action, returns nothing)
+    public static void greet(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Name cannot be empty");
+        }
+        System.out.println("Hello, " + name + "!");
+    }
+
+    // 3. Instance method (called on an object instance)
+    public double multiply(double x, double y) {
+        return x * y;
+    }
+
+    public static void main(String[] args) {
+        greet("Alice");
+        int sum = add(10, 20);
+        System.out.println("Sum: " + sum); // Output: Sum: 30
+    }
+}
+```
+
+#### 🛡️ Best Practices:
+- **Visibility:** Use `private` for internal helper methods, `public` only for external APIs.
+- **Fail Fast:** Validate input parameters at the beginning of the method.
+- **Single Responsibility:** Keep methods focused on one task (ideally under 30 lines).
+- **Naming:** Follow `camelCase` for method names (e.g., `calculateTotal`).
+""",
+        },
+        "class": {
+            "title": "How to Create a Java Class",
+            "answer": """### ☕ How to Create a Java Class
+
+A Java class encapsulates state (fields) and behavior (methods).
+
+#### ✅ Java Class Example:
+```java
+public class UserAccount {
+    // 1. Private fields (Encapsulation)
+    private String username;
+    private double balance;
+
+    // 2. Constructor
+    public UserAccount(String username, double initialBalance) {
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("Username cannot be empty");
+        }
+        this.username = username;
+        this.balance = Math.max(0.0, initialBalance);
+    }
+
+    // 3. Getter methods
+    public String getUsername() { return username; }
+    public double getBalance() { return balance; }
+
+    // 4. Business method
+    public void deposit(double amount) {
+        if (amount <= 0) throw new IllegalArgumentException("Deposit must be positive");
+        this.balance += amount;
+    }
+}
+```
+
+#### 🛡️ Best Practices:
+- Keep fields `private` and provide getters/setters as needed.
+- Validate arguments inside the constructor to ensure object invariants.
+""",
+        },
+        "package": {
+            "title": "How to Create a Java Package",
+            "answer": """### ☕ How to Create a Java Package
+
+A package organizes related classes into a namespace and avoids naming conflicts.
+
+#### ✅ 1. Package Declaration (first line of Java file):
+```java
+package com.myapp.security;
+
+public class TokenValidator {
+    public static boolean isValid(String token) {
+        return token != null && token.length() >= 32;
+    }
+}
+```
+
+#### ✅ 2. Directory Structure matches the package name:
+```
+src/
+└── com/
+    └── myapp/
+        └── security/
+            └── TokenValidator.java
+```
+
+#### ✅ 3. Importing the package into another file:
+```java
+package com.myapp.controllers;
+
+import com.myapp.security.TokenValidator;
+
+public class AuthController {
+    public void handleLogin(String token) {
+        if (TokenValidator.isValid(token)) {
+            System.out.println("Authorized");
+        }
+    }
+}
+```
+""",
+        },
+        "loop": {
+            "title": "How to Use Loops in Java",
+            "answer": """### ☕ Loops in Java
+
+#### ✅ Standard `for` loop:
+```java
+for (int i = 0; i < 5; i++) {
+    System.out.println(i);
+}
+```
+
+#### ✅ Enhanced `for-each` loop (arrays / collections):
+```java
+String[] languages = {"Python", "Java", "TypeScript"};
+for (String lang : languages) {
+    System.out.println(lang);
+}
+```
+
+#### ✅ `while` loop:
+```java
+int count = 0;
+while (count < 3) {
+    System.out.println("Count: " + count);
+    count++;
+}
+```
+""",
         },
         "default": {
             "title": "Java Secure Coding — OWASP Top 10 (2025) Quick Reference",
@@ -511,6 +680,7 @@ print(result.stdout)
 - Validate and whitelist input before passing to any OS command.
 """,
         },
+
         "default": {
             "title": "Python Secure Coding — General Guidance",
             "answer": """\
@@ -552,6 +722,14 @@ obj = json.loads(untrusted_string)  # safe
 
     def _get_java_example(self, q_lower: str) -> dict:
         """Select the most relevant Java example block for the query."""
+        if any(k in q_lower for k in ("function", "def ", "method", "func")):
+            return self._JAVA_EXAMPLES["function"]
+        if any(k in q_lower for k in ("class", "object", "oop")):
+            return self._JAVA_EXAMPLES["class"]
+        if any(k in q_lower for k in ("package", "module", "namespace")):
+            return self._JAVA_EXAMPLES["package"]
+        if any(k in q_lower for k in ("loop", "for ", "while", "iterate", "range")):
+            return self._JAVA_EXAMPLES["loop"]
         if any(k in q_lower for k in ("sql", "injection", "query", "database", "preparedstatement")):
             return self._JAVA_EXAMPLES["sql"]
         if any(k in q_lower for k in ("command", "exec", "processbuilder", "runtime", "shell", "os")):
@@ -634,9 +812,39 @@ obj = json.loads(untrusted_string)  # safe
 {sources[0].content if sources else 'Follow standard OWASP 2025 defensive coding practices.'}
 """
 
+        # --- Dual-language inline answer (Python + Java) ---
+        if language == "both":
+            py_ans = self._get_python_answer(q_lower)["answer"]
+            java_ex = self._get_java_example(q_lower)
+            if "answer" in java_ex:
+                java_ans = java_ex["answer"]
+            else:
+                guidelines_md = "\n".join(f"- {g}" for g in java_ex["guidelines"])
+                java_ans = f"""### ☕ {java_ex['title']}
+
+#### ⚠️ Vulnerable Java Pattern to Avoid:
+```java
+{java_ex['vulnerable']}
+```
+
+#### ✅ Secure Java Implementation:
+```java
+{java_ex['secure']}
+```
+
+#### 🛡️ Remediation Guidelines:
+{guidelines_md}"""
+            return f"""{py_ans}
+
+---
+
+{java_ans}"""
+
         # --- Java-specific inline answer (Gemini offline fallback) ---
         if language == "java":
             ex = self._get_java_example(q_lower)
+            if "answer" in ex:
+                return ex["answer"]
             guidelines_md = "\n".join(f"- {g}" for g in ex["guidelines"])
             top_ref = f"\n\n#### 📚 OWASP Reference:\n{sources[0].content}" if sources else ""
             return f"""### ☕ {ex['title']}
